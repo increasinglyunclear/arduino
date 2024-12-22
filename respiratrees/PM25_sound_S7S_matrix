@@ -1,0 +1,296 @@
+// RESPIRATREES CODE BY KEVIN WALKER 06 JUL 2022
+// Adafruit PM 2.5 sensor to piezo speaker, 7-segment LED display, Neopixel matrix display
+
+// S7S HOOKUP:
+// SS to 09
+// SDI to 10
+// SCK to 13
+// SDO to 12
+// VCC to +5V
+// GND to GND
+
+//PM2.5: data to pin 2
+#include "Adafruit_PM25AQI.h"
+#include <SoftwareSerial.h>
+#include <SPI.h>
+
+SoftwareSerial pmSerial(2, 3); // PM25 TX to D2, don't need 3. VCC to +5V, GND to GND
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
+
+// SOUND
+unsigned long lastTime = millis();
+unsigned long reading = 0;
+
+// RGB LED
+//int red_light_pin = 11;
+//int green_light_pin = 10;
+//int blue_light_pin = 9;
+
+// S7S
+int csPin = 9;
+
+//MATRIX:
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoMatrix.h>
+#include <Adafruit_NeoPixel.h>
+
+#define PIN 6
+
+// Max is 255, 32 is a conservative value to not overload
+// a USB power supply (500mA) for 12x12 pixels.
+#define BRIGHTNESS 32
+
+// Define matrix width and height.
+#define mw 8
+#define mh 8
+Adafruit_NeoMatrix *matrix = new Adafruit_NeoMatrix(8, 8,
+    PIN,
+    NEO_MATRIX_TOP     + NEO_MATRIX_LEFT +
+    NEO_MATRIX_ROWS + NEO_MATRIX_PROGRESSIVE,
+    NEO_GRB            );
+
+#define LED_BLACK    0
+
+#define LED_RED_VERYLOW   (3 <<  11)
+#define LED_RED_LOW     (7 <<  11)
+#define LED_RED_MEDIUM    (15 << 11)
+#define LED_RED_HIGH    (31 << 11)
+
+#define LED_GREEN_VERYLOW (1 <<  5)
+#define LED_GREEN_LOW     (15 << 5)
+#define LED_GREEN_MEDIUM  (31 << 5)
+#define LED_GREEN_HIGH    (63 << 5)
+
+#define LED_BLUE_VERYLOW  3
+#define LED_BLUE_LOW    7
+#define LED_BLUE_MEDIUM   15
+#define LED_BLUE_HIGH     31
+
+#define LED_ORANGE_VERYLOW  (LED_RED_VERYLOW + LED_GREEN_VERYLOW)
+#define LED_ORANGE_LOW    (LED_RED_LOW     + LED_GREEN_LOW)
+#define LED_ORANGE_MEDIUM (LED_RED_MEDIUM  + LED_GREEN_MEDIUM)
+#define LED_ORANGE_HIGH   (LED_RED_HIGH    + LED_GREEN_HIGH)
+
+#define LED_PURPLE_VERYLOW  (LED_RED_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_PURPLE_LOW    (LED_RED_LOW     + LED_BLUE_LOW)
+#define LED_PURPLE_MEDIUM (LED_RED_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_PURPLE_HIGH   (LED_RED_HIGH    + LED_BLUE_HIGH)
+
+#define LED_CYAN_VERYLOW  (LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_CYAN_LOW    (LED_GREEN_LOW     + LED_BLUE_LOW)
+#define LED_CYAN_MEDIUM   (LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_CYAN_HIGH   (LED_GREEN_HIGH    + LED_BLUE_HIGH)
+
+#define LED_WHITE_VERYLOW (LED_RED_VERYLOW + LED_GREEN_VERYLOW + LED_BLUE_VERYLOW)
+#define LED_WHITE_LOW   (LED_RED_LOW     + LED_GREEN_LOW     + LED_BLUE_LOW)
+#define LED_WHITE_MEDIUM  (LED_RED_MEDIUM  + LED_GREEN_MEDIUM  + LED_BLUE_MEDIUM)
+#define LED_WHITE_HIGH    (LED_RED_HIGH    + LED_GREEN_HIGH    + LED_BLUE_HIGH)
+
+static const uint8_t PROGMEM
+
+RGB_bmp[][64] = {
+  // 00: blue, blue/red, red, red/green, green, green/blue, blue, white
+  { 0x100, 0x200, 0x300, 0x400, 0x600, 0x800, 0xA00, 0xF00,
+    0x101, 0x202, 0x303, 0x404, 0x606, 0x808, 0xA0A, 0xF0F,
+    0x001, 0x002, 0x003, 0x004, 0x006, 0x008, 0x00A, 0x00F,
+    0x011, 0x022, 0x033, 0x044, 0x066, 0x088, 0x0AA, 0x0FF,
+    0x010, 0x020, 0x030, 0x040, 0x060, 0x080, 0x0A0, 0x0F0,
+    0x110, 0x220, 0x330, 0x440, 0x660, 0x880, 0xAA0, 0xFF0,
+    0x100, 0x200, 0x300, 0x400, 0x600, 0x800, 0xA00, 0xF00,
+    0x111, 0x222, 0x333, 0x444, 0x666, 0x888, 0xAAA, 0xFFF,
+  },
+};
+
+void setup() {
+
+  // PM25 TO SERIAL
+  Serial.begin(9600);
+  while (!Serial) delay(10);
+  pmSerial.begin(9600);
+  if (! aqi.begin_UART(&pmSerial)) { // connect to the sensor over software serial
+    Serial.println("Could not find PM 2.5 sensor!");
+    while (1) delay(10);
+  }
+  Serial.println("PM25 found!");
+
+  // SOUND
+  pinMode(10, OUTPUT); // speaker
+
+  // S7S
+  pinMode(csPin, OUTPUT);
+  digitalWrite(csPin, HIGH); //By default, don't be selecting OpenSegment
+  SPI.begin(); //Start the SPI hardware
+  SPI.setClockDivider(SPI_CLOCK_DIV64); //Slow down the master a bit
+  digitalWrite(csPin, LOW); //Drive the CS pin low to select OpenSegment
+  SPI.transfer('v'); //Reset command
+
+  // MATRIX
+  Serial.begin(115200);
+  matrix->begin();
+  matrix->setBrightness(BRIGHTNESS);
+  matrix->show();
+  matrix->clear();
+}
+
+void loop() {
+
+  if (millis() - lastTime > 1000) {
+
+    PM25_AQI_Data data;
+    if (! aqi.read(&data)) {
+      Serial.println("Could not read from AQI");
+      if (millis() - lastTime > 500) { // try again in a bit!
+        return;
+      }
+    }
+
+    Serial.println("AQI reading success");
+
+    Serial.println();
+    Serial.println(F("---------------------------------------"));
+    Serial.println(F("Concentration Units (standard)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_standard);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_standard);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_standard);
+    Serial.println(F("Concentration Units (environmental)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_env);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_env);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_env);
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("Particles > 0.3um / 0.1L air:")); Serial.println(data.particles_03um);
+    Serial.print(F("Particles > 0.5um / 0.1L air:")); Serial.println(data.particles_05um);
+    Serial.print(F("Particles > 1.0um / 0.1L air:")); Serial.println(data.particles_10um);
+    Serial.print(F("Particles > 2.5um / 0.1L air:")); Serial.println(data.particles_25um);
+    Serial.print(F("Particles > 5.0um / 0.1L air:")); Serial.println(data.particles_50um);
+    Serial.print(F("Particles > 10 um / 0.1L air:")); Serial.println(data.particles_100um);
+    Serial.println(F("---------------------------------------"));
+
+    reading = data.pm25_standard;
+
+    /// SOUND ///
+    if (reading > 50) {
+      tone(10, reading) ; // pin, freq, duration
+    }
+    else {
+      tone(10, 50) ; // pin, freq, duration
+    }
+
+    /// S7S ///
+    //cycles++; //Counting cycles! Yay!
+    spiSendValue(reading); //Send the four characters to the display
+    //delay(1); //If we remove the slow debug statements, we need a very small delay to prevent flickering
+
+
+    /// MATRIX ///
+
+    if (reading < 50) {
+
+      for (int i = 0; i < 7; i++) {
+        matrix->clear();
+        matrix->fillCircle(3, 3, i, LED_GREEN_LOW);
+        if (i > 0) {
+          matrix->fillCircle(3, 3, i - 1, LED_GREEN_MEDIUM);
+        }
+        if (i > 1) {
+          matrix->fillCircle(3, 3, i - 2, LED_GREEN_HIGH);
+        }
+        matrix->show();
+        delay(200);
+      }
+
+      for (int i = 7; i > 0; i--) {
+        matrix->clear();
+        matrix->fillCircle(3, 3, i, LED_GREEN_LOW);
+        if (i > 0) {
+          matrix->fillCircle(3, 3, i - 1, LED_GREEN_MEDIUM);
+        }
+        if (i > 1) {
+          matrix->fillCircle(3, 3, i - 2, LED_GREEN_HIGH);
+        }
+        matrix->show();
+        delay(200);
+      }
+
+    } else
+
+      if (reading < 100) {
+
+        for (int i = 0; i < 7; i++) {
+          matrix->clear();
+          matrix->fillCircle(3, 3, i, LED_ORANGE_LOW);
+          if (i > 0) {
+            matrix->fillCircle(3, 3, i - 1, LED_ORANGE_MEDIUM);
+          }
+          if (i > 1) {
+            matrix->fillCircle(3, 3, i - 2, LED_ORANGE_HIGH);
+          }
+          matrix->show();
+          delay(200);
+        }
+
+        for (int i = 7; i > 0; i--) {
+          matrix->clear();
+          matrix->fillCircle(3, 3, i, LED_ORANGE_LOW);
+          if (i > 0) {
+            matrix->fillCircle(3, 3, i - 1, LED_ORANGE_MEDIUM);
+          }
+          if (i > 1) {
+            matrix->fillCircle(3, 3, i - 2, LED_ORANGE_HIGH);
+          }
+          matrix->show();
+          delay(200);
+        }
+        
+      } else {
+
+        for (int i = 0; i < 7; i++) {
+          matrix->clear();
+          matrix->fillCircle(3, 3, i, LED_RED_LOW);
+          if (i > 0) {
+            matrix->fillCircle(3, 3, i - 1, LED_RED_MEDIUM);
+          }
+          if (i > 1) {
+            matrix->fillCircle(3, 3, i - 2, LED_RED_HIGH);
+          }
+          matrix->show();
+          delay(200);
+        }
+
+        for (int i = 7; i > 0; i--) {
+          matrix->clear();
+          matrix->fillCircle(3, 3, i, LED_RED_LOW);
+          if (i > 0) {
+            matrix->fillCircle(3, 3, i - 1, LED_RED_MEDIUM);
+          }
+          if (i > 1) {
+            matrix->fillCircle(3, 3, i - 2, LED_RED_HIGH);
+          }
+          matrix->show();
+          delay(200);
+        }
+
+      }
+
+    lastTime = millis();
+  }
+
+}
+
+
+void spiSendValue(int tempCycles) //Given a number, spiSendValue chops up an integer into four values and sends them out over spi
+{
+  digitalWrite(csPin, LOW); //Drive the CS pin low to select OpenSegment
+
+  SPI.transfer(tempCycles / 1000); //Send the left most digit
+  tempCycles %= 1000; //Now remove the left most digit from the number we want to display
+  SPI.transfer(tempCycles / 100);
+  tempCycles %= 100;
+  SPI.transfer(tempCycles / 10);
+  tempCycles %= 10;
+  SPI.transfer(tempCycles); //Send the right most digit
+
+  digitalWrite(csPin, HIGH); //Release the CS pin to de-select OpenSegment
+}

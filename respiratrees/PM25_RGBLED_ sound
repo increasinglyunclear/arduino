@@ -1,0 +1,106 @@
+
+// Adafruit PM 2.5 sensor to RGB LED and piezo speaker, by Kevin Walker
+// Sound in this version is like a Geiger counter, using a delay based on the reading, instead of translating the reading straight into a frequency.
+
+#include "Adafruit_PM25AQI.h"
+#include <SoftwareSerial.h>
+SoftwareSerial pmSerial(2, 3);
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
+
+//TIMER TO REPLACE THE DELAY IN READING
+unsigned long lastTime = millis();
+
+unsigned long reading = 0;
+
+// RGB LED
+int red_light_pin = 11;
+int green_light_pin = 10;
+int blue_light_pin = 9;
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) delay(10);
+  pmSerial.begin(9600);
+  if (! aqi.begin_UART(&pmSerial)) { // connect to the sensor over software serial
+    Serial.println("Could not find PM 2.5 sensor!");
+    while (1) delay(10);
+  }
+  Serial.println("PM25 found!");
+
+  pinMode(blue_light_pin, OUTPUT); // green LED
+  pinMode(green_light_pin, OUTPUT); // blue
+  pinMode(red_light_pin, OUTPUT); // red
+  pinMode(12, OUTPUT); // speaker
+}
+
+void loop() {
+
+  if (millis() - lastTime > 1000) {
+
+    PM25_AQI_Data data;
+    if (! aqi.read(&data)) {
+      Serial.println("Could not read from AQI");
+      delay(500);
+      //if (millis() - lastTime > 500) {  // try again in a bit!
+      return;
+      //}
+    }
+
+    Serial.println("AQI reading success");
+
+    Serial.println();
+    Serial.println(F("---------------------------------------"));
+    Serial.println(F("Concentration Units (standard)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_standard);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_standard);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_standard);
+    Serial.println(F("Concentration Units (environmental)"));
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("PM 1.0: ")); Serial.print(data.pm10_env);
+    Serial.print(F("\t\tPM 2.5: ")); Serial.print(data.pm25_env);
+    Serial.print(F("\t\tPM 10: ")); Serial.println(data.pm100_env);
+    Serial.println(F("---------------------------------------"));
+    Serial.print(F("Particles > 0.3um / 0.1L air:")); Serial.println(data.particles_03um);
+    Serial.print(F("Particles > 0.5um / 0.1L air:")); Serial.println(data.particles_05um);
+    Serial.print(F("Particles > 1.0um / 0.1L air:")); Serial.println(data.particles_10um);
+    Serial.print(F("Particles > 2.5um / 0.1L air:")); Serial.println(data.particles_25um);
+    Serial.print(F("Particles > 5.0um / 0.1L air:")); Serial.println(data.particles_50um);
+    Serial.print(F("Particles > 10 um / 0.1L air:")); Serial.println(data.particles_100um);
+    Serial.println(F("---------------------------------------"));
+
+    reading = data.pm25_standard;
+    //Serial.println(reading);
+    if (data.pm25_standard > 100) {
+      RGB_color(0, 255, 255); // RED
+    }
+    else if (data.pm25_standard > 50) {
+      RGB_color(0, 150, 255); // ORANGE 0, 150, 255; 200, 200, 255?
+    }
+    else {
+      RGB_color(255, 200, 255); // GREEN 255, 0, 255; change middle to 200
+    }
+
+    lastTime = millis();
+  }
+
+  tone(12, 10, 60) ; // Send what you get back to speaker; adjust the pulse as needed to get the range you want.
+  //int soundDelay = map(reading, 0, 1000, 10, 500);
+  int readingAdjust = int(300 - reading);
+  if (readingAdjust > 0) {
+    delay(readingAdjust);
+  }
+  //Serial.println(readingAdjust);
+
+  //delay(1000);
+}
+
+void playSound() {
+}
+
+void RGB_color(int red_light_value, int green_light_value, int blue_light_value)
+{
+  analogWrite(red_light_pin, red_light_value);
+  analogWrite(green_light_pin, green_light_value);
+  analogWrite(blue_light_pin, blue_light_value);
+}

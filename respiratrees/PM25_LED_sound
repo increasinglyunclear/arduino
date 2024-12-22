@@ -1,0 +1,64 @@
+
+// Adafruit PM 2.5 sensor to 3 LEDs and piezo speaker, by Kevin Walker
+
+#include "Adafruit_PM25AQI.h"
+#include <SoftwareSerial.h>
+SoftwareSerial pmSerial(2, 3);
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
+
+unsigned long lastTime = millis();
+int reading = 0;
+
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) delay(10);
+  pmSerial.begin(9600);
+  if (! aqi.begin_UART(&pmSerial)) { // connect to the sensor over software serial
+    Serial.println("Could not find PM 2.5 sensor!");
+    while (1) delay(10);
+  }
+  Serial.println("PM25 found!");
+
+  pinMode(9, OUTPUT); // green LED
+  pinMode(10, OUTPUT); // amber
+  pinMode(11, OUTPUT); // red
+  pinMode(12, OUTPUT); // speaker
+}
+
+void loop() {
+
+  if (millis() - lastTime > 1000) {
+    PM25_AQI_Data data;
+    if (! aqi.read(&data)) {
+      delay(500);  // try again in a bit!
+      return;
+    }
+    Serial.println(data.pm25_standard);
+    reading = data.pm25_standard;
+    if (data.pm25_standard > 100) {
+      digitalWrite(9, LOW);
+      digitalWrite(10, LOW);
+      digitalWrite(11, HIGH);
+    }
+    else if (data.pm25_standard > 50) {
+      digitalWrite(9, LOW);
+      digitalWrite(10, HIGH);
+      digitalWrite(11, LOW);
+    }
+    else {
+      digitalWrite(9, HIGH);
+      digitalWrite(10, LOW);
+      digitalWrite(11, LOW);
+    }
+    lastTime = millis();
+  }
+
+  //data.pm25_standard
+
+  tone(12, 10, 50) ; // Send what you get back to speaker; adjust the pulse as needed to get the range you want.
+
+  //delay(1000);
+}
+
+void playSound() {
+}

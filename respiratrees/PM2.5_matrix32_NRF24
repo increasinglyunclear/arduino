@@ -1,0 +1,152 @@
+// RESPIRATREES ARDUINO CODE BY KEVIN WALKER 06 Jan 2023
+// Adafruit PM 2.5 sensor to 2X Neopixel matrix display & NRF24L01 wireless module
+// to communicate with second Arduino to control a light via DMX
+
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoMatrix.h>
+#include <Adafruit_NeoPixel.h>
+#define PIN 6 // MATRIX
+
+Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(16, 8, PIN,
+                            NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
+                            NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
+                            NEO_GRB            + NEO_KHZ800);
+
+const uint16_t colors[] = {
+  matrix.Color(0, 255, 0), matrix.Color(100, 200, 0), matrix.Color(150, 150, 0), matrix.Color(200, 100, 0), matrix.Color(255, 50, 0), matrix.Color(255, 0, 0)
+};
+
+//PM2.5: TX to D5, don't need 3. VCC to +5V, GND to GND
+#include "Adafruit_PM25AQI.h"
+#include <SoftwareSerial.h>
+#include <SPI.h>
+SoftwareSerial pmSerial(5, 3); // Pin 3 not used
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
+
+unsigned long lastTime = millis();
+unsigned long reading = 0;
+
+//NRF24
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+RF24 radio(9, 10); // CE, CSN
+const byte address[6] = "00001";
+
+
+void setup() {
+
+  matrix.begin();
+  matrix.setTextWrap(false);
+  matrix.setBrightness(40);
+  matrix.setTextColor(colors[0]);
+
+  //PM25 TO SERIAL
+  Serial.begin(9600);
+  while (!Serial) delay(10);
+  pmSerial.begin(9600);
+  if (! aqi.begin_UART(&pmSerial)) { // connect to the sensor over software serial
+    Serial.println("Could not find PM 2.5 sensor!");
+    while (1) delay(10);
+  }
+  Serial.println("PM25 found!");
+
+  //NRF24
+  radio.begin();                  
+  radio.openWritingPipe(address); 
+  radio.setPALevel(RF24_PA_MIN);  //set  as min or max depending on the distance between the transmitter and receiver.
+  radio.stopListening();          //sets module as transmitter
+
+}
+
+int x    = matrix.width();
+int pass = 0;
+
+void loop() {
+
+  matrix.fillScreen(0);
+  matrix.setCursor(x, 0);
+
+  // DISPLAY TEXT ACCORDING TO PM2.5 READING:
+  
+  if (reading < 12) {
+    matrix.setTextColor(colors[0]);
+    matrix.print("Air Quality=Good");
+    if (--x < -100) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "1";
+    radio.write(&text, sizeof(text));
+  }
+
+  else if (reading < 35) {
+    matrix.setTextColor(colors[1]);
+    matrix.print("Air Quality=Moderate");
+    if (--x < -120) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "2";
+    radio.write(&text, sizeof(text));
+  }
+
+  else if (reading < 55) {
+    matrix.setTextColor(colors[2]);
+    matrix.print("Air Quality=Unhealthy");
+    if (--x < -130) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "3";
+    radio.write(&text, sizeof(text));
+  }
+
+  else if (reading < 150) {
+    matrix.setTextColor(colors[3]);
+    matrix.print("Air Quality=Unhealthy");
+    if (--x < -130) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "4";
+    radio.write(&text, sizeof(text));
+  }
+
+  else if (reading < 250) {
+    matrix.setTextColor(colors[4]);
+    matrix.print("Air Quality=Very Unhealthy");
+    if (--x < -160) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "5";
+    radio.write(&text, sizeof(text));
+  }
+
+  else {
+    matrix.setTextColor(colors[5]);
+    matrix.print("Air Quality=Hazardous");
+    if (--x < -130) {
+      x = matrix.width();
+      if (++pass >= 3) pass = 0;
+    }
+    const char text[] = "6";
+    radio.write(&text, sizeof(text));
+  }
+
+  matrix.show();
+  delay(100);
+
+  PM25_AQI_Data data;
+  if (! aqi.read(&data)) {
+    //Serial.println("Could not read from AQI");
+    if (millis() - lastTime > 500) { // try again in a bit!
+      return;
+    }
+  }
+
+  reading = data.pm25_standard;
+  Serial.println(reading);
+  
+}

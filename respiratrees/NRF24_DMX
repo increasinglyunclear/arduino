@@ -1,0 +1,79 @@
+// RESPIRATREES ARDUINO CODE BY KEVIN WALKER 06 Jan 2023
+// Input from NRF24L01 wireless module to control CTC-DRA10-R2 DMX sheid
+
+//DMX
+#include <Conceptinetics.h>
+#define DMX_MASTER_CHANNELS   100
+#define RXEN_PIN                2
+DMX_Master        dmx_master ( DMX_MASTER_CHANNELS, RXEN_PIN );
+
+unsigned long lastTime = millis();
+unsigned long reading = 0;
+
+//NRF24
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+RF24 radio(9, 10); // CE, CSN
+const byte address[6] = "00001";
+
+
+void setup() {
+
+  dmx_master.enable ();
+
+  //NRF24
+  //Serial.begin(9600);  //DEBUG ONLY
+  radio.begin();                  //Starting the Wireless communication
+  radio.openReadingPipe(0, address); //Setting the address where we will send the data
+  radio.setPALevel(RF24_PA_MIN);  //You can set it as minimum or maximum depending on the distance between the transmitter and receiver.
+  radio.startListening();          //This sets the module as transmitter
+
+}
+
+void loop() {
+
+  int newInt = 0;
+
+  if (radio.available())
+  {
+    char text[1] = "";
+    radio.read(&text, sizeof(text));
+    String stringOne = String(text);// converting a constant char into a String
+    newInt = stringOne.toInt();
+    delay(5);
+    //Serial.println(newInt); // DEBUG ONLY
+  }
+
+  // DISPLAY LIGHT COLOUR BASED ON INCOMING DATA
+  
+  if (newInt == 1) {
+    dmx_master.setChannelValue ( 2, 255 );
+  }
+
+  if (newInt == 2) {
+    dmx_master.setChannelValue ( 1, 255 );
+    dmx_master.setChannelValue ( 2, 200 );
+  }
+
+  if (newInt == 3) {
+    dmx_master.setChannelValue ( 1, 255 );
+    dmx_master.setChannelValue ( 2, 150 );
+  }
+
+  if (newInt == 4) {
+    dmx_master.setChannelValue ( 1, 255 );
+    dmx_master.setChannelValue ( 2, 100 );
+  }
+
+  if (newInt == 5) {
+    dmx_master.setChannelValue ( 1, 255 );
+    dmx_master.setChannelValue ( 2, 50 );
+  }
+
+  if (newInt == 6) {
+    dmx_master.setChannelValue ( 1, 255 );
+    dmx_master.setChannelValue ( 2, 0 );
+  }
+
+}
