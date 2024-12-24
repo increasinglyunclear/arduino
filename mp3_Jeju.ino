@@ -1,8 +1,7 @@
 // Jeju MP3 player
-// Kevin Walker 20 Nov 2022
 // for playing MP3 files in live event
-// commissioned by British Council for Daily Rituals project
-// https://nine-earths.net/dailyrituals/
+// for Daily Rituals project https://nine-earths.net/dailyrituals/
+// Kevin Walker 20 Nov 2022
 
 #include <SFEMP3ShieldConfig.h>
 #include <SFEMP3Shield.h>
