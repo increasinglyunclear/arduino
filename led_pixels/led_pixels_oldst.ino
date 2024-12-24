@@ -1,6 +1,6 @@
-// This is the installed 'story mode' of my Old Street installation
+// This is the installed 'story mode' of my Old Street installation https://increasinglyunclear.world/old/
 // minus the live data - it tells a personal story.
-// https://increasinglyunclear.world/old/
+// Note that LEDs are in groups of 5
 // Kevin Walker 11 Jun 2013
 
 #include "SPI.h"
