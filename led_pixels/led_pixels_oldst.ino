@@ -8,7 +8,7 @@
 
 int dataPin  = 1;    // Yellow wire on Adafruit Pixels
 int clockPin = 3;    // Green wire on Adafruit Pixels
-Adafruit_WS2801 strip = Adafruit_WS2801(200, dataPin, clockPin);
+Adafruit_WS2801 strip = Adafruit_WS2801(200, dataPin, clockPin); // NOTE NUMBER OF LEDs!
 
 void setup() {
   strip.begin();
