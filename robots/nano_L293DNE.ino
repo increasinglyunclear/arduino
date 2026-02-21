@@ -1,5 +1,6 @@
 // Control 2 motors using Arduino Nano BLE Sense Rev 2 and L293DNE motor control IC.
 // Also works with L298N motor controller
+// Kevin Walker 07 Feb 2026
 
 // connections:
 // +5V → Arduino VIN, L293DNE Pins 1, 8, 9, 16 (from laptop or USB charger, or 3.7V LiPo battery)
