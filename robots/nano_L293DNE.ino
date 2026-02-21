@@ -2,7 +2,7 @@
 // Also works with L298N motor controller
 
 // connections:
-// +5V → Arduino VIN, L293DNE Pins 1, 8, 9, 16 (from laptop or USB charger, or 7.4V LiPo battery)
+// +5V → Arduino VIN, L293DNE Pins 1, 8, 9, 16 (from laptop or USB charger, or 3.7V LiPo battery)
 // GND → Arduino GND, L293DNE Pins 4, 5, 12, 13
 // D9 → L293DNE Pin 2
 // D8 → L293DNE Pin 7
