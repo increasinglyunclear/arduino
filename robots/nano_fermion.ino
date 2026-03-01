@@ -1,5 +1,6 @@
 // Fermion HR8833 Motor Driver Test 
 // Arduino Nano 33 BLE Sense Rev1
+// interactive test - uses serial & key presses 
 
 // Motor 1 pins (D8/D7 swapped to match actual Fermion wiring)
 const int M1A = 9;
