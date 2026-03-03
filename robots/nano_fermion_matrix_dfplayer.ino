@@ -3,6 +3,80 @@
 // Motor tests with random audio and visual feedback
 // Kevin Walker 02 Mar 2026
 
+/*
+ * POWER CONNECTIONS:
+ * ------------------
+ * 3.7V LiPo Battery:
+ *   Battery + (Red)    → Arduino VIN
+ *                      → Fermion VM (motor power)
+ *   Battery - (Black)  → Common GND (all components)
+ * 
+ * Arduino Power Outputs:
+ *   Arduino 3.3V       → Fermion VCC (logic power)
+ *                      → LED Matrix VCC
+ *                      → DFPlayer VCC
+ *   Arduino GND        → Common GND
+ * 
+ * 
+ * MOTOR DRIVER (Fermion HR8833):
+ * ------------------------------
+ *   Arduino 3.3V → Fermion VCC (logic)
+ *   Battery +    → Fermion VM (motor power)
+ *   Arduino GND  → Fermion GND
+ *   Arduino D9   → Fermion M1A
+ *   Arduino D7   → Fermion M1B
+ *   Arduino D8   → Fermion M2A
+ *   Arduino D6   → Fermion M2B
+ *   
+ *   Motor 1 → Fermion Motor 1 outputs
+ *   Motor 2 → Fermion Motor 2 outputs
+ * 
+ * 
+ * DFPLAYER MINI (Audio):
+ * ----------------------
+ *   Arduino 3.3V     → DFPlayer VCC
+ *   Arduino GND      → DFPlayer GND
+ *   Arduino D0 (TX)  → 1kΩ resistor → DFPlayer RX
+ *   Arduino D1 (RX)  → DFPlayer TX (direct, no resistor)
+ *   
+ *   DFPlayer SPK_1   → Speaker +
+ *   DFPlayer SPK_2   → Speaker -
+ *   
+ * 
+ * 
+ * LED MATRIX (8x8 Bicolor I2C):
+ * -----------------------------
+ *   Arduino 3.3V  → LED Matrix VCC
+ *   Arduino GND   → LED Matrix GND
+ *   Arduino SDA (A4) → LED Matrix SDA
+ *   Arduino SCL (A5) → LED Matrix SCL
+ *   
+ * 
+ * CRITICAL NOTES:
+ * ---------------
+ * 1. All grounds MUST be connected together (common ground)
+ * 2. 1kΩ resistor on DFPlayer RX is REQUIRED (protects DFPlayer)
+ * 3. Motor pin mapping: M1B=D7, M2A=D8 (swapped from standard)
+ * 4. SD card must be FAT32 formatted
+ * 5. Audio files must be named 0001.mp3 through 0010.mp3
+ * 
+ * PIN SUMMARY:
+ * ------------
+ * D0  - TX to DFPlayer (via 1kΩ resistor)
+ * D1  - RX from DFPlayer
+ * D6  - Fermion M2B
+ * D7  - Fermion M1B
+ * D8  - Fermion M2A
+ * D9  - Fermion M1A
+ * A4  - LED Matrix SDA
+ * A5  - LED Matrix SCL
+ * 3.3V - Power to all logic (Fermion VCC, Matrix, DFPlayer)
+ * VIN - Battery + (3.7V)
+ * GND - Common ground
+ * 
+ * ========================================
+ */
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include "Adafruit_LEDBackpack.h"
