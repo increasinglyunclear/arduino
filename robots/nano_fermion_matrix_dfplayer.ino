@@ -9,12 +9,12 @@
  * 3.7V LiPo Battery:
  *   Battery + (Red)    → Arduino VIN
  *                      → Fermion VM (motor power)
+ *                      → DFPlayer VCC
  *   Battery - (Black)  → Common GND (all components)
  * 
  * Arduino Power Outputs:
  *   Arduino 3.3V       → Fermion VCC (logic power)
  *                      → LED Matrix VCC
- *                      → DFPlayer VCC
  *   Arduino GND        → Common GND
  * 
  * 
@@ -85,17 +85,18 @@
 DFRobotDFPlayerMini myDFPlayer;
 Adafruit_BicolorMatrix matrix = Adafruit_BicolorMatrix();
 
-// Motor pins (corrected)
+// Motor pins — must match physical wiring: D9→IA1, D8→IA2, D7→IB1, D6→IB2
 const int M1A = 9;
-const int M1B = 7;
-const int M2A = 8;
+const int M1B = 8;
+const int M2A = 7;
 const int M2B = 6;
 
 // Built-in LED
 const int LED = LED_BUILTIN;
 
-// Number of audio files available
-const int NUM_TRACKS = 10;
+// Number of audio files on SD card
+const int NUM_TRACKS = 3;
+int currentTrack = 1;
 
 void setup() {
   // Configure motor pins
@@ -158,9 +159,6 @@ void setup() {
   digitalWrite(LED, HIGH);
   delay(1000);
   digitalWrite(LED, LOW);
-  
-  // Seed random with analog noise
-  randomSeed(analogRead(A0));
   
   delay(2000);
 }
@@ -262,10 +260,12 @@ void displayRestState() {
   matrix.writeDisplay();
 }
 
-// Play random track
-int playRandomTrack() {
-  int track = random(1, NUM_TRACKS + 1);  // Random 1-10
+// Play next track in sequence (1 → 2 → 3 → 1 → ...)
+int playNextTrack() {
+  int track = currentTrack;
   myDFPlayer.play(track);
+  currentTrack++;
+  if (currentTrack > NUM_TRACKS) currentTrack = 1;
   return track;
 }
 
@@ -274,8 +274,8 @@ void testMotor1() {
   digitalWrite(LED, HIGH);
   
   // Motor 1 Forward
-  int track = playRandomTrack();
-  delay(300);  // Let audio start
+  int track = playNextTrack();
+  delay(300);
   
   displayNumber(track, LED_GREEN);
   delay(500);
@@ -306,7 +306,7 @@ void testMotor2() {
   digitalWrite(LED, HIGH);
   
   // Motor 2 Forward
-  int track = playRandomTrack();
+  int track = playNextTrack();
   delay(300);
   
   displayNumber(track, LED_GREEN);
@@ -338,7 +338,7 @@ void testBothMotors() {
   digitalWrite(LED, HIGH);
   
   // Both Forward
-  int track = playRandomTrack();
+  int track = playNextTrack();
   delay(300);
   
   displayNumber(track, LED_GREEN);
