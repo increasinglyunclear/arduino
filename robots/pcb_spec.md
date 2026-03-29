@@ -23,6 +23,7 @@ Two MCU configurations are documented. The designer should advise on which is mo
 
 ### Option A: Makerfabs MaUWB ESP32S3 (current prototype)
 
+- https://www.makerfabs.com/mauwb-esp32s3-uwb-module.html
 - **What it is:** Single board integrating ESP32-S3 + STM32 coprocessor + DW3000 UWB chip + 0.96" OLED (128x64)
 - **Footprint:** ~60 x 25 mm (with headers)
 - **UWB interface:** AT commands over internal UART (GPIO17/18), transparent to the designer
@@ -34,13 +35,14 @@ Two MCU configurations are documented. The designer should advise on which is mo
 ### Option B: Seeed XIAO ESP32-S3 + Ai-Thinker BU03 DW3000 Module
 
 - **XIAO ESP32-S3:** 21 x 17.8 mm, USB-C, built-in LiPo JST connector with charging circuit, 11 GPIOs (D0-D10)
+- - https://grobotronics.com/seeed-studio-xiao-esp32-s3-plus.html
 - **BU03 module:** 23 x 13 x 2.5 mm SMD-24 package, DW3000 UWB chip, onboard ceramic antenna, SPI interface
+- https://openelab.io/products/ai-thinker-uwb-bu03-dw3000-plan-module-positioning-accuracy-10cm?variant=44538104807622&country=DE&currency=EUR
 - **UWB interface:** SPI (SCK, MOSI, MISO, CS, IRQ, RST = 6 pins from XIAO). Requires new firmware driver — significant software change.
 - **No built-in OLED.** An external 0.96" I2C OLED could be added if desired (shares I2C bus with BNO055).
 - **Pin pressure:** BU03 SPI needs 6 pins. Combined with all other peripherals, pin assignment is tight. Designer should verify feasibility before committing.
 - **Advantages:** Much smaller combined footprint, XIAO has built-in LiPo charging
 - **Disadvantages:** Requires new UWB driver firmware, tight pin budget, no OLED unless added separately
-- **Reference:** [BU03 product page](https://openelab.io/products/ai-thinker-uwb-bu03-dw3000-plan-module-positioning-accuracy-10cm)
 
 ---
 
@@ -50,27 +52,36 @@ Two MCU configurations are documented. The designer should advise on which is mo
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
-| 1 | IMU | DFRobot Gravity 10DOF (BNO055) | I2C, address 0x28 | 3.3V from MCU | Breakout board with JST cable. SDA/SCL/VCC/GND |
+| 1 | IMU | DFRobot Gravity 10DOF (BNO055) | I2C, address 0x28 | 3.3V from MCU | Breakout board with JST cable. SDA/SCL/VCC/GND|
+https://grobotronics.com/gravity-10-dof-imu-ahrs-bno055-bmp280.html
 | 2 | Motor 1 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU |
+https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
 | 3 | Motor 2 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU |
+https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
 | 4 | Audio player | DFPlayer Mini MP3 | UART 9600 baud | 3.3V from MCU | TX line needs 1K ohm series resistor. RX direct. |
+https://wiki.dfrobot.com/dfr0299
 | 5 | Speaker | Small 8 ohm speaker | Wired to DFPlayer SPK1/SPK2 | From DFPlayer | **Mounted externally**, connected via 2-wire cable |
+https://grobotronics.com/speaker-enclosed-2w-8ohm-20x30mm-ph1-25.html
 | 6 | Battery | 3.7V LiPo, JST-PH 2-pin | JST connector | N/A | Robot-A: 2000 mAh. Robot-B: 1000 mAh. |
+https://grobotronics.com/li-po-battery-3-7v-2000mah-molex-2-5mm.html
 
 ### 3.2 Robot-A (Emitter) Only
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
 | 7 | LED matrix | MAX7219 8x8 LED module | Bit-banged SPI (DIN, CLK, CS) | VCC/GND direct from battery | **Mounted externally**, connected via 5-wire cable |
+https://grobotronics.com/led-matrix-8x8-red-with-max7219.html
 | 8 | IR emitter | 940 nm IR LED | GPIO + 200 ohm series resistor | From GPIO | Mounted forward-facing on chassis, short wire to board |
+https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
 
 ### 3.3 Robot-B (Receiver) Only
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
 | 7 | Status LED | Standard visible LED (any color) | GPIO + 100 ohm series resistor | From GPIO | **Mounted externally**, 2-wire cable |
+(to be provided)
 | 8 | IR receiver | IR phototransistor (940 nm sensitive) | Analog input | 3.3V bias | Mounted forward-facing on chassis, short wire to board |
-
+https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
 ---
 
 ## 4. Pin Mapping
