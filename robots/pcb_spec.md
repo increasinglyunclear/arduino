@@ -1,8 +1,5 @@
 # Robot PCB / Perf Board Specification
-
-**Date:** February 2026
-**Author:** Kevin
-**Status:** Draft — awaiting designer review
+Kevin Walker 30 Mar 2026
 
 ---
 
@@ -17,11 +14,7 @@ Both units are battery-powered (3.7V LiPo) and must be programmable via USB-C wi
 
 ---
 
-## 2. MCU Options
-
-Two MCU configurations are documented. The designer should advise on which is more practical for a compact board.
-
-### Option A: Makerfabs MaUWB ESP32S3 (current prototype)
+## 2. MCU: Makerfabs MaUWB ESP32S3 (current prototype)
 
 - https://www.makerfabs.com/mauwb-esp32s3-uwb-module.html
 - **What it is:** Single board integrating ESP32-S3 + STM32 coprocessor + DW3000 UWB chip + 0.96" OLED (128x64)
@@ -29,20 +22,6 @@ Two MCU configurations are documented. The designer should advise on which is mo
 - **UWB interface:** AT commands over internal UART (GPIO17/18), transparent to the designer
 - **Available GPIOs for peripherals:** IO1 through IO11
 - **Power input:** USB-C on-board, or VIN/GND pins
-- **Advantages:** Proven working firmware, built-in OLED eliminates a separate display, AT command protocol avoids SPI complexity
-- **Disadvantages:** Larger footprint, limited to 11 external GPIOs
-
-### Option B: Seeed XIAO ESP32-S3 + Ai-Thinker BU03 DW3000 Module
-
-- **XIAO ESP32-S3:** 21 x 17.8 mm, USB-C, built-in LiPo JST connector with charging circuit, 11 GPIOs (D0-D10)
-- - https://grobotronics.com/seeed-studio-xiao-esp32-s3-plus.html
-- **BU03 module:** 23 x 13 x 2.5 mm SMD-24 package, DW3000 UWB chip, onboard ceramic antenna, SPI interface
-- https://openelab.io/products/ai-thinker-uwb-bu03-dw3000-plan-module-positioning-accuracy-10cm?variant=44538104807622&country=DE&currency=EUR
-- **UWB interface:** SPI (SCK, MOSI, MISO, CS, IRQ, RST = 6 pins from XIAO). Requires new firmware driver — significant software change.
-- **No built-in OLED.** An external 0.96" I2C OLED could be added if desired (shares I2C bus with BNO055).
-- **Pin pressure:** BU03 SPI needs 6 pins. Combined with all other peripherals, pin assignment is tight. Designer should verify feasibility before committing.
-- **Advantages:** Much smaller combined footprint, XIAO has built-in LiPo charging
-- **Disadvantages:** Requires new UWB driver firmware, tight pin budget, no OLED unless added separately
 
 ---
 
@@ -52,41 +31,29 @@ Two MCU configurations are documented. The designer should advise on which is mo
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
-| 1 | IMU | DFRobot Gravity 10DOF (BNO055) | I2C, address 0x28 | 3.3V from MCU | Breakout board with JST cable. SDA/SCL/VCC/GND|
-https://grobotronics.com/gravity-10-dof-imu-ahrs-bno055-bmp280.html
-| 2 | Motor 1 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU |
-https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
-| 3 | Motor 2 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU |
-https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
-| 4 | Audio player | DFPlayer Mini MP3 | UART 9600 baud | 3.3V from MCU | TX line needs 1K ohm series resistor. RX direct. |
-https://wiki.dfrobot.com/dfr0299
-| 5 | Speaker | Small 8 ohm speaker | Wired to DFPlayer SPK1/SPK2 | From DFPlayer | **Mounted externally**, connected via 2-wire cable |
-https://grobotronics.com/speaker-enclosed-2w-8ohm-20x30mm-ph1-25.html
-| 6 | Battery | 3.7V LiPo, JST-PH 2-pin | JST connector | N/A | Robot-A: 2000 mAh. Robot-B: 1000 mAh. |
-https://grobotronics.com/li-po-battery-3-7v-2000mah-molex-2-5mm.html
+| 1 | IMU | DFRobot Gravity 10DOF (BNO055) | I2C, address 0x28 | 3.3V from MCU | Breakout board with JST cable. SDA/SCL/VCC/GND| https://grobotronics.com/gravity-10-dof-imu-ahrs-bno055-bmp280.html
+| 2 | Motor 1 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU | https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
+| 3 | Motor 2 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style PWM, 1000-2000 us | VCC/GND direct from battery | Signal wire only from MCU | https://grobotronics.com/gravity-dc-micro-metal-gear-motor-w-driver-75-1.html
+| 4 | Audio player | DFPlayer Mini MP3 | UART 9600 baud | 3.3V from MCU | TX line needs 1K ohm series resistor. RX direct. | https://wiki.dfrobot.com/dfr0299
+| 5 | Speaker | Small 8 ohm speaker | Wired to DFPlayer SPK1/SPK2 | From DFPlayer | **Mounted externally**, connected via 2-wire cable | https://grobotronics.com/speaker-enclosed-2w-8ohm-20x30mm-ph1-25.html
+| 6 | Battery | 3.7V LiPo, JST-PH 2-pin | JST connector | N/A | Robot-A: 2000 mAh. Robot-B: 1000 mAh. | https://grobotronics.com/li-po-battery-3-7v-2000mah-molex-2-5mm.html
 
 ### 3.2 Robot-A (Emitter) Only
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
-| 7 | LED matrix | MAX7219 8x8 LED module | Bit-banged SPI (DIN, CLK, CS) | VCC/GND direct from battery | **Mounted externally**, connected via 5-wire cable |
-https://grobotronics.com/led-matrix-8x8-red-with-max7219.html
-| 8 | IR emitter | 940 nm IR LED | GPIO + 200 ohm series resistor | From GPIO | Mounted forward-facing on chassis, short wire to board |
-https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
+| 7 | LED matrix | MAX7219 8x8 LED module | Bit-banged SPI (DIN, CLK, CS) | VCC/GND direct from battery | **Mounted externally**, connected via 5-wire cable | https://grobotronics.com/led-matrix-8x8-red-with-max7219.html
+| 8 | IR emitter | 940 nm IR LED | GPIO + 200 ohm series resistor | From GPIO | Mounted forward-facing on chassis, short wire to board | https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
 
 ### 3.3 Robot-B (Receiver) Only
 
 | # | Peripheral | Model / Part | Interface | Power | Notes |
 |---|---|---|---|---|---|
-| 7 | Status LED | Standard visible LED (any color) | GPIO + 100 ohm series resistor | From GPIO | **Mounted externally**, 2-wire cable |
-(to be provided)
-| 8 | IR receiver | IR phototransistor (940 nm sensitive) | Analog input | 3.3V bias | Mounted forward-facing on chassis, short wire to board |
-https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
+| 7 | Status LED | Standard visible LED (any color) | GPIO + 100 ohm series resistor | From GPIO | **Mounted externally**, 2-wire cable | (to be provided)
+| 8 | IR receiver | IR phototransistor (940 nm sensitive) | Analog input | 3.3V bias | Mounted forward-facing on chassis, short wire to board | https://www.hellasdigital.gr/electronics/sensors/infrared-sensors/940nm-ir-infrared-receiver-led/
 ---
 
 ## 4. Pin Mapping
-
-### 4.1 Option A — MaUWB ESP32S3
 
 Internal pins (no routing needed — on-board):
 
@@ -126,42 +93,6 @@ Internal pins (no routing needed — on-board):
 | IO8 | 8 | Motor 2 signal | Direct to motor signal wire |
 | IO9 | 9 | IR phototransistor | Analog input, pull-down to GND as needed |
 
-### 4.2 Option B — XIAO ESP32-S3 + BU03
-
-**Robot-A (Emitter):**
-
-| XIAO Pin | Function | Routing |
-|---|---|---|
-| D0 | MAX7219 DIN | To external header (matrix cable) |
-| D1 | MAX7219 CLK | To external header (matrix cable) |
-| D2 | MAX7219 CS | To external header (matrix cable) |
-| D3 | BNO055 SDA | I2C (Wire) |
-| D4 | Motor 1 signal | Direct to motor signal wire |
-| D5 | BNO055 SCL | I2C (Wire) |
-| D6 | Motor 2 signal | Direct to motor signal wire |
-| D7 | BU03 SPI CS | To BU03 module |
-| D8 | DFPlayer TX | Through 1K resistor to DFPlayer RX pin |
-| D9 | DFPlayer RX | Direct to DFPlayer TX pin |
-| D10 | IR LED anode | Through 200 ohm resistor, cathode to GND |
-| SPI bus | BU03 SCK/MOSI/MISO/IRQ/RST | See note below |
-
-**Robot-B (Receiver):**
-
-| XIAO Pin | Function | Routing |
-|---|---|---|
-| D0 | Status LED anode | Through 100 ohm resistor, cathode to GND |
-| D3 | BNO055 SDA | I2C (Wire) |
-| D4 | Motor 1 signal | Direct to motor signal wire |
-| D5 | BNO055 SCL | I2C (Wire) |
-| D6 | Motor 2 signal | Direct to motor signal wire |
-| D7 | BU03 SPI CS | To BU03 module |
-| D8 | DFPlayer TX | Through 1K resistor to DFPlayer RX pin |
-| D9 | DFPlayer RX | Direct to DFPlayer TX pin |
-| D10 | IR phototransistor | Analog input |
-| SPI bus | BU03 SCK/MOSI/MISO/IRQ/RST | See note below |
-
-**BU03 SPI note:** The BU03 requires 6 connections: SCK, MOSI, MISO, CS, IRQ, RST. The XIAO's hardware SPI pins overlap with D7-D10 (used for DFPlayer and IR). The designer must validate whether the default SPI bus can be remapped or if software SPI is needed for either the BU03 or the MAX7219. This is the primary feasibility risk with Option B.
-
 ---
 
 ## 5. Power Architecture
@@ -174,8 +105,6 @@ Battery (3.7V LiPo, JST-PH 2-pin)
    |        +---> 3.3V regulated output
    |                 |
    |                 +---> BNO055 VCC
-   |                 +---> DFPlayer Mini VCC
-   |                 +---> BU03 VCC (Option B only)
    |                 +---> IR phototransistor bias (Robot-B)
    |
    +---> Direct battery voltage (3.7V nominal, 3.0-4.2V range)
@@ -183,9 +112,9 @@ Battery (3.7V LiPo, JST-PH 2-pin)
             +---> Motor 1 VCC + GND
             +---> Motor 2 VCC + GND
             +---> MAX7219 VCC + GND (Robot-A only)
+            +---> DFPlayer Mini VCC
 ```
 
-- No additional voltage regulators needed; the MCU board's onboard 3.3V regulator supplies all logic-level peripherals
 - Motors and MAX7219 tolerate the 3.0-4.2V battery voltage range
 - Total current budget estimate:
   - ESP32-S3 + BLE + UWB: ~150 mA peak
@@ -231,11 +160,10 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 ## 8. Mechanical and Access Requirements
 
 - **USB-C port** on the MCU must be accessible from outside the robot chassis for programming and serial debugging. No disassembly should be needed.
-- **Battery JST connector** must be accessible for charging (if using XIAO's built-in charger) or battery swapping.
+- **Battery JST connector** must be accessible for charging or battery swapping.
 - **Board footprint target:** approximately 8 x 8 cm or smaller, to fit a compact robot chassis.
-- **Mounting:** The board should have 4 corner mounting holes (M2 or M2.5) for standoff mounting to the chassis.
-- **Component height:** The MaUWB board (Option A) is the tallest component at ~10 mm. All other components are shorter. Maximum stack height ~15 mm including headers.
-- **Antenna clearance:** The UWB antenna (on MaUWB or BU03) should not be obstructed by metal or batteries. Position the MCU/BU03 module at a board edge or top of the chassis.
+- **Component height:** The MaUWB board is the largest component at ~10 mm length. All other components are shorter. Stacking is possible: BNO055 is wired via JST connector not pins, same with LED matrix (Robot-A) which needs to be on top - it can be above the MaUWB leaving the OLED visible.
+- **Antenna clearance:** The UWB antenna (on MaUWB) should not be obstructed by metal or batteries. Position the MCU/BU03 module at a board edge.
 
 ---
 
@@ -245,13 +173,11 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 
 2. **Ground plane:** A continuous ground plane on one layer is recommended for signal integrity (especially BLE and UWB radio performance).
 
-3. **Motor noise:** The DC motors generate electrical noise. Decoupling capacitors (100 nF ceramic) across each motor's power terminals are recommended, placed as close to the motor headers as possible.
+3. **Motor noise:** The DC motors generate electrical noise. Decoupling capacitors (100 nF ceramic) across each motor's power terminals could be used, placed as close to the motor headers as possible.
 
 4. **I2C pull-ups:** The BNO055 breakout board includes pull-up resistors. No additional pull-ups are needed on the PCB. If an external OLED is added (Option B), confirm its breakout also includes pull-ups, or add 4.7K pull-ups on SDA/SCL.
 
 5. **DFPlayer Mini orientation:** The DFPlayer Mini module has a micro-SD card slot on one side. Ensure it is oriented so the SD card is accessible for loading audio files, or use a socket that allows removal.
-
-6. **Battery protection:** If the XIAO (Option B) is used, its built-in LiPo charging circuit handles charge management. If the MaUWB (Option A) is used, confirm whether it has LiPo charging — if not, an external TP4056 module or similar may be needed for convenient charging.
 
 ---
 
@@ -261,8 +187,7 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 
 | Qty | Part | Notes |
 |---|---|---|
-| 1 | MCU board (MaUWB ESP32S3 or XIAO ESP32-S3) | See Section 2 |
-| 1 | BU03 DW3000 module (Option B only) | SMD-24 |
+| 1 | MCU board (MaUWB ESP32S3) |
 | 1 | DFRobot Gravity BNO055 10DOF IMU | With JST cable |
 | 2 | DFRobot Gravity DC Micro Metal Gear Motor 75:1 | Servo-style, 3-wire |
 | 1 | DFPlayer Mini MP3 Player | With micro-SD card loaded with audio files |
@@ -289,28 +214,3 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 | 1 | 100 ohm resistor (1/4W) | Status LED current limiting |
 
 ---
-
-## 11. Reference Photos
-
-*Photos of the current breadboard prototype will be provided separately. They show:*
-
-- [ ] Robot-A (Emitter) — top view showing component layout and wiring
-- [ ] Robot-A (Emitter) — side view showing stack height
-- [ ] Robot-B (Receiver) — top view
-- [ ] Robot-B (Receiver) — side view
-- [ ] MaUWB ESP32S3 board close-up showing IO pin labels
-- [ ] Motor mounting and wiring
-- [ ] BNO055 breakout board and JST cable
-- [ ] DFPlayer Mini with speaker connection
-- [ ] MAX7219 LED matrix module
-- [ ] IR LED and phototransistor placement (forward-facing)
-
----
-
-## 12. Deliverables Requested from Designer
-
-1. **Schematic** for each unit (or one universal schematic with BOM variants marked)
-2. **PCB layout** (preferred) or **perf board wiring diagram** (acceptable for prototype)
-3. **Bill of Materials** with sourcing suggestions
-4. **Assembly notes** for any tricky components (BU03 SMD soldering, DFPlayer orientation, etc.)
-5. Confirmation of **pin assignment feasibility** for Option B (XIAO + BU03) before committing to that path
