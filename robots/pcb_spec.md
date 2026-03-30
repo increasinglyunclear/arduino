@@ -153,7 +153,6 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 | BNO055 IMU | 4 | Both | SDA, SCL, 3V3, GND | 4-pin JST or header (matching DFRobot breakout) |
 | Battery | 2 | Both | Battery +/- | JST-PH 2-pin (must be accessible from outside) |
 | MCU module | varies | Both | Socket or headers for MaUWB or XIAO | Female headers matching the MCU board's pins |
-| BU03 module | 24 | Both (Option B) | SMD pads for BU03 | SMD-24 footprint per BU03 datasheet |
 
 ---
 
@@ -175,7 +174,7 @@ All externally-mounted peripherals connect to the board via pin headers or solde
 
 3. **Motor noise:** The DC motors generate electrical noise. Decoupling capacitors (100 nF ceramic) across each motor's power terminals could be used, placed as close to the motor headers as possible.
 
-4. **I2C pull-ups:** The BNO055 breakout board includes pull-up resistors. No additional pull-ups are needed on the PCB. If an external OLED is added (Option B), confirm its breakout also includes pull-ups, or add 4.7K pull-ups on SDA/SCL.
+4. **I2C pull-ups:** The BNO055 breakout board includes pull-up resistors. No additional pull-ups are needed on the PCB. 
 
 5. **DFPlayer Mini orientation:** The DFPlayer Mini module has a micro-SD card slot on one side. Ensure it is oriented so the SD card is accessible for loading audio files, or use a socket that allows removal.
 
