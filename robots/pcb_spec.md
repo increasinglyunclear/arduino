@@ -14,7 +14,7 @@ Both units are battery-powered (3.7V LiPo) and must be programmable via USB-C wi
 
 ---
 
-## 2. MCU: Makerfabs MaUWB ESP32S3 (current prototype)
+## 2. MCU: Makerfabs MaUWB ESP32S3 
 
 - https://www.makerfabs.com/mauwb-esp32s3-uwb-module.html
 - **What it is:** Single board integrating ESP32-S3 + STM32 coprocessor + DW3000 UWB chip + 0.96" OLED (128x64)
