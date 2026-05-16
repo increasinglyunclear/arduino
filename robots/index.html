@@ -1,0 +1,3224 @@
+<!-- This is the web page for programming the robots
+INSTRUCTIONS:
+Paste this code into a file called 'index.html' in a folder called 'position_map'.
+Open Terminal on Mac.
+Click on index.html in the Finder, Get Info, copy the path.
+In Terminal, type 'cd' then paste the path, to go to that directory.
+Paste the following command in Terminal: python3 -m http.server 8000
+In Chrome, paste: http://localhost:8000/
+Plug in the Seeed Studio microcontroller with attached antenna.
+Click the Connect button, select the port that the microcontroller is attached to.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UWB Robot Control</title>
+<style>
+  :root {
+    --bg: #0a0a0a; --panel: #111; --card: #181818; --border: #2a2a2a;
+    --text: #eee; --muted: #888; --dim: #555;
+    --green: #22c55e; --blue: #3b82f6; --red: #ef4444;
+    --orange: #f59e0b; --purple: #a78bfa;
+    --tag0: #ff4040; --tag1: #cc80ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    gap: 12px; flex-wrap: wrap; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.5px; }
+  .hdr-r { display: flex; align-items: center; gap: 10px; }
+
+  .btn { padding: 6px 14px; border: none; border-radius: 5px; font-size: 12px;
+    font-weight: 700; cursor: pointer; color: #fff; transition: filter 0.15s; }
+  .btn:hover { filter: brightness(1.2); }
+  .btn:active { filter: brightness(0.9); }
+  .btn-conn   { background: var(--green); }
+  .btn-conn.active { background: var(--red); }
+  .btn-seek   { background: var(--green); }
+  .btn-wander { background: var(--blue); }
+  .btn-stop   { background: var(--red); }
+  .btn-rec    { background: #7f1d1d; }
+  .btn-rec.active { background: var(--red);
+    animation: rec-pulse 1.2s ease-in-out infinite; }
+  @keyframes rec-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  }
+  .btn-sm     { padding: 4px 10px; font-size: 11px; }
+  .btn-ghost  { background: #333; }
+  .btn-track  { background: #333; min-width: 30px; padding: 4px 6px; font-size: 11px; }
+  .btn-fwd    { background: #15803d; }
+  .btn-rev    { background: #b45309; }
+  .btn-turn   { background: #1e40af; }
+  .btn-stop2  { background: #666; }
+
+  main { max-width: 960px; margin: 0 auto; padding: 14px; display: flex;
+    flex-direction: column; gap: 12px; }
+
+  .card { background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; }
+  .card h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 10px; font-weight: 700; }
+
+  /* Separation (single big number) */
+  .sep-wrap  { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .sep-val   { font-size: 56px; font-weight: 800; line-height: 1; letter-spacing: -2px;
+    font-variant-numeric: tabular-nums; color: #e5e5e5; }
+  .sep-val.stale { color: var(--dim); }
+  .sep-unit  { font-size: 18px; color: var(--muted); font-weight: 600; }
+  .sep-btns  { margin-left: auto; display: flex; gap: 6px; }
+  .sep-sub   { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+    margin-top: 4px; }
+  .sep-raw   { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+    margin-top: 2px; }
+
+  /* Raw-d(T0,T1) diagnostic block — sits between calibrated readout and the
+     offset status line so a colliding UWB stream (A0 + T0 on same anchor id)
+     shows up as a wide spread / noisy sparkline even when the calibrated
+     display is near zero. */
+  .sep-d1 { display: flex; align-items: baseline; gap: 8px; margin-top: 10px;
+    flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+  .sep-d1-lbl  { font-size: 11px; color: var(--muted); }
+  .sep-d1-val  { font-size: 22px; font-weight: 700; color: #d0d0d0;
+    letter-spacing: -0.5px; }
+  .sep-d1-val.stale { color: var(--dim); }
+  .sep-d1-unit { font-size: 11px; color: var(--muted); }
+  .sep-d1-stats{ font-size: 10px; color: var(--muted); margin-left: auto; }
+  .sep-d1-stats.wide { color: var(--orange); }
+  .sep-spark { width: 100%; height: 60px; margin-top: 6px; background: #0a0a0a;
+    border: 1px solid #1f1f1f; border-radius: 4px; }
+  .sep-spark-axis { stroke: var(--blue); stroke-width: 1; stroke-dasharray: 3 3;
+    opacity: 0.5; }
+  .sep-spark-line { stroke: var(--tag1); stroke-width: 1.2; stroke-linejoin: round;
+    stroke-linecap: round; }
+
+  /* Compass grid */
+  .cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cmp-cell { background: #0c0c0c; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cmp-cell.t0 { border-left: 4px solid var(--tag0); }
+  .cmp-cell.t1 { border-left: 4px solid var(--tag1); }
+  .cmp-head { display: flex; justify-content: space-between; align-items: baseline;
+    width: 100%; }
+  .cmp-tid  { font-weight: 800; font-size: 13px; letter-spacing: 0.5px; }
+  .cmp-tid.t0 { color: var(--tag0); }
+  .cmp-tid.t1 { color: var(--tag1); }
+  .cmp-svg  { width: 160px; height: 160px; }
+  .cmp-svg .ring    { fill: #0a0a0a; stroke: #2a2a2a; stroke-width: 1.2; }
+  .cmp-svg .tick    { stroke: #555; stroke-width: 1; }
+  .cmp-svg .tick-maj{ stroke: #888; stroke-width: 1.4; }
+  .cmp-svg .lbl     { fill: #888; font-size: 9px; font-weight: 700; font-family: inherit;
+    text-anchor: middle; dominant-baseline: central; }
+  .cmp-svg .lbl-n   { fill: #ef4444; }
+  /* Needle rotates via the SVG `transform="rotate(angle 50 50)"` attribute,
+     which carries its own pivot point. Do NOT add CSS transform-origin /
+     transform-box here — fill-box re-bases the origin to the needle's own
+     bbox and the needle flies off-screen. */
+  .cmp-svg .needle  { transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); }
+  .cmp-svg.t0 .needle-fwd { fill: var(--tag0); }
+  .cmp-svg.t1 .needle-fwd { fill: var(--tag1); }
+  .cmp-svg .needle-back   { fill: #333; }
+  .cmp-svg .hub      { fill: #1a1a1a; stroke: #555; stroke-width: 1; }
+  .cmp-svg.stale .needle-fwd { fill: var(--dim); }
+  .cmp-readout { display: flex; justify-content: space-between; width: 100%;
+    align-items: center; gap: 8px; }
+  .cmp-deg  { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px; }
+  .cmp-deg.t0 { color: var(--tag0); }
+  .cmp-deg.t1 { color: var(--tag1); }
+  .cmp-deg.stale { color: var(--dim); }
+  .cmp-raw  { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .phase-pill { display: inline-block; padding: 2px 9px; border-radius: 10px;
+    background: #2a2a2a; color: var(--text); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.5px; }
+  .phase-pill.manual  { background: #444; }
+  .phase-pill.seek    { background: #166534; color: #bbf7d0; }
+  .phase-pill.wander  { background: #1e3a8a; color: #bfdbfe; }
+  .phase-pill.arrive  { background: #7c2d12; color: #fed7aa; }
+  .phase-pill.drive   { background: #1e40af; color: #bfdbfe; }
+
+  .mode-btns { display: flex; gap: 6px; }
+  .mode-btns .btn { flex: 1; padding: 10px; font-size: 13px; }
+  .slider-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .slider-row label { font-size: 12px; color: var(--muted); font-weight: 600; min-width: 60px; }
+  .slider-row input[type="range"] { flex: 1; }
+  .slider-row .sv { font-size: 12px; font-weight: 700; min-width: 42px; text-align: right;
+    font-variant-numeric: tabular-nums; }
+  input[type="range"] { -webkit-appearance: none; height: 5px; background: #333;
+    border-radius: 3px; outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
+    height: 16px; border-radius: 50%; background: var(--blue); border: 2px solid #222; }
+
+  .motor-group { margin-bottom: 10px; padding: 10px; background: #111; border-radius: 6px; }
+  .motor-group:last-child { margin-bottom: 0; }
+  .motor-group .mg-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .mg-label { font-size: 12px; font-weight: 700; }
+
+  .dir-btns { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; margin: 6px 0; }
+  .dir-btns .btn { padding: 8px; font-size: 13px; font-weight: 900; user-select: none; -webkit-user-select: none; }
+  .dir-btns .btn-empty { visibility: hidden; }
+
+  .track-row { display: flex; gap: 4px; align-items: center; margin: 4px 0; }
+  .track-row span { font-size: 11px; color: var(--muted); font-weight: 600; min-width: 48px; }
+
+  .diag-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px;
+    font-size: 11px; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
+  .diag-grid .dk { color: var(--muted); }
+  .diag-grid .dv { color: var(--text); font-weight: 700; }
+  .diag-grid .dv.dim  { color: var(--dim); font-weight: 400; }
+  .diag-grid .dv.ok   { color: #34d399; }
+  .diag-grid .dv.warn { color: #f59e0b; }
+  .diag-grid .dv.err  { color: #ef4444; }
+
+  .diag-log { background: #0a0a0a; border: 1px solid var(--border); border-radius: 4px;
+    height: 140px; overflow-y: auto; padding: 4px 6px; font-family: 'SF Mono', Menlo, monospace;
+    font-size: 10px; line-height: 1.35; color: #9ca3af; white-space: pre; }
+  .diag-log .l-tag  { color: #fca5a5; }
+  .diag-log .l-scan { color: #a7f3d0; }
+  .diag-log .l-rng  { color: #93c5fd; }
+  .diag-log .l-cmd  { color: #fcd34d; }
+
+  /* Test Sequence */
+  .seq-head  { display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .seq-head .seq-lbl { font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; }
+  .seq-tgt   { display: flex; gap: 4px; }
+  .seq-tgt .btn { min-width: 40px; }
+  .seq-tgt .btn.active { background: var(--blue); }
+  .seq-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; min-height: 32px; }
+  /* Two side-by-side columns: motor track left, animation track right. Both
+     tracks play in parallel when Run is pressed; each advances through its
+     own steps by their own durations. */
+  .seq-cols  { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+  .seq-col   { display: flex; flex-direction: column; }
+  .seq-col-hd { font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px;
+    padding: 2px 4px; border-bottom: 1px solid var(--border); }
+  .seq-col.anim .seq-col-hd  { color: var(--tag0); border-color: var(--tag0); }
+  .seq-col.motor .seq-col-hd { color: var(--tag1); border-color: var(--tag1); }
+  /* Stack add-step buttons below each column */
+  .seq-col .seq-add { margin-bottom: 0; flex-wrap: wrap; gap: 3px; }
+  .seq-col .seq-add .btn { font-size: 11px; padding: 3px 8px; }
+  .seq-empty { color: var(--dim); font-size: 11px; font-style: italic;
+    padding: 8px; text-align: center; }
+  .seq-row   { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    background: #111; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 12px; flex-wrap: wrap; position: relative; }
+  .seq-row.active { border-color: #22c55e; background: #0e1a0e; }
+  .seq-row.done   { opacity: 0.55; }
+  .seq-row.dragging { opacity: 0.45; }
+  /* Drop indicators: a colored top/bottom border hints where the dragged
+     row will land relative to the one being hovered. */
+  .seq-row.drop-before { box-shadow: 0 -2px 0 0 var(--blue) inset, 0 -2px 0 0 var(--blue); }
+  .seq-row.drop-after  { box-shadow: 0 2px 0 0 var(--blue)  inset, 0 2px 0 0 var(--blue); }
+  .seq-drag  { cursor: grab; color: var(--dim); user-select: none;
+    font-size: 14px; line-height: 1; padding: 0 2px; letter-spacing: -2px; }
+  .seq-drag:hover { color: var(--text); }
+  .seq-drag:active { cursor: grabbing; }
+  .seq-row.locked .seq-drag { opacity: 0.3; cursor: not-allowed; }
+  .seq-idx   { font-weight: 700; color: var(--muted); min-width: 18px;
+    font-variant-numeric: tabular-nums; }
+  .seq-row select { background: #222; color: var(--text); border: 1px solid #333;
+    border-radius: 3px; padding: 3px 6px; font-size: 12px; cursor: pointer; }
+  /* Per-step target selector: color-coded so a glance at the sequence list
+     tells you which robot each step will drive. Inherits card target on ''. */
+  .seq-row .seq-tgt-sel { min-width: 64px; font-weight: 700; }
+  .seq-row .seq-tgt-sel[data-t="0"]   { color: var(--tag0); border-color: var(--tag0); }
+  .seq-row .seq-tgt-sel[data-t="1"]   { color: var(--tag1); border-color: var(--tag1); }
+  .seq-row .seq-tgt-sel[data-t="255"] { color: var(--text); border-color: var(--border); }
+  .seq-row .seq-tgt-sel[data-t=""]    { color: var(--dim);  border-color: #333; font-style: italic; }
+  .seq-row .seq-param { display: flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--muted); }
+  .seq-row input[type="number"] { width: 52px; background: #222; color: var(--text);
+    border: 1px solid #333; border-radius: 3px; padding: 3px 6px; font-size: 12px;
+    font-variant-numeric: tabular-nums; text-align: right; }
+  .seq-row .seq-del { margin-left: auto; background: transparent; color: var(--muted);
+    border: none; cursor: pointer; font-size: 16px; padding: 0 6px; line-height: 1; }
+  .seq-row .seq-del:hover { color: var(--red); }
+  .seq-row .seq-param-bytes { font-family: ui-monospace, monospace; }
+  .seq-row .seq-bytes { color: var(--text); background: #222; border: 1px solid #333;
+    border-radius: 3px; padding: 2px 6px; font-size: 11px; max-width: 180px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-variant-numeric: tabular-nums; }
+  .seq-add   { display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    margin-bottom: 10px; }
+  .seq-add .seq-lbl { font-size: 11px; color: var(--muted); margin-right: 4px;
+    font-weight: 700; letter-spacing: 0.5px; }
+  .seq-run   { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .seq-repeat { display: inline-flex; align-items: center; gap: 2px;
+    font-size: 12px; color: var(--muted); }
+  .seq-repeat input { width: 44px; padding: 2px 4px; background: var(--card);
+    color: var(--fg); border: 1px solid var(--border); border-radius: 3px;
+    font-size: 12px; font-variant-numeric: tabular-nums; }
+  .seq-prog  { margin-left: auto; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .seq-prog.running { color: #22c55e; font-weight: 700; }
+  .seq-prog.done    { color: var(--muted); }
+
+  /* Named-sequence library row: dropdown to pick a saved snapshot, a name
+     field, and Save/Delete. Sits between Target and the step list. */
+  .seq-lib   { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 10px; }
+  .seq-lib .seq-lbl { font-size: 11px; color: var(--muted); font-weight: 700;
+    letter-spacing: 0.5px; }
+  .seq-lib select { background: #222; color: var(--text); border: 1px solid #333;
+    border-radius: 3px; padding: 3px 6px; font-size: 12px; cursor: pointer;
+    min-width: 140px; }
+  .seq-lib input[type="text"] { background: #222; color: var(--text);
+    border: 1px solid #333; border-radius: 3px; padding: 3px 6px; font-size: 12px;
+    width: 150px; }
+  /* Current-name badge in the card title. Dimmed and italic when no named
+     snapshot is loaded (the working sequence is "untitled"), bright with a
+     leading "•" dot when it differs from its saved source ("dirty"). */
+  .seq-cur   { font-size: 12px; color: var(--muted); font-weight: 400;
+    font-style: italic; margin-left: 8px; text-transform: none; letter-spacing: 0; }
+  .seq-cur.named { color: var(--text); font-style: normal; }
+  .seq-cur.dirty { color: var(--orange); font-style: normal; }
+
+  /* Firmware-export modal: full-screen dim overlay with a centered panel
+     containing the generated C++ block + Copy / Download / Close. Hidden
+     by default; shown by toggling .visible. */
+  .fw-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: none; z-index: 100; align-items: center; justify-content: center;
+    padding: 20px; }
+  .fw-overlay.visible { display: flex; }
+  .fw-modal  { background: #181818; border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px; max-width: 900px; width: 100%;
+    max-height: 90vh; display: flex; flex-direction: column; gap: 10px; }
+  .fw-modal h3 { margin: 0; font-size: 14px; letter-spacing: 0.5px; }
+  .fw-modal p  { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .fw-modal textarea { flex: 1; min-height: 300px; background: #0f0f0f;
+    color: var(--text); border: 1px solid #333; border-radius: 4px;
+    padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.4; white-space: pre; overflow: auto;
+    resize: vertical; }
+  .fw-modal .fw-btns { display: flex; gap: 6px; justify-content: flex-end;
+    align-items: center; flex-wrap: wrap; }
+  .fw-modal .fw-msg { font-size: 11px; color: var(--muted); margin-right: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>UWB Robot Control</h1>
+  <div class="hdr-r">
+    <button class="btn btn-conn" id="connBtn" onclick="toggleSerial()">Connect</button>
+    <span id="rxStatus" style="font-size:11px;color:var(--muted);min-width:140px"></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Separation and Heading cards commented out — not in use right now.
+       The backing JS (updateSeparation, updateCompass, refreshStaleness,
+       updatePhase) is null-guarded so it silently no-ops when these DOM
+       nodes are absent. To restore: just un-comment the two blocks below. -->
+  <!--
+  <div class="card">
+    <h3>Separation (T0 &harr; T1)</h3>
+    <div class="sep-wrap">
+      <span class="sep-val stale" id="sepVal">&#45;&#45;</span>
+      <span class="sep-unit">cm</span>
+      <div class="sep-btns">
+        <button class="btn btn-ghost btn-sm" onclick="calibrateDistance()"
+          title="Place robots together, then click to set current reading as 0 cm">Calibrate</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetDistanceCal()"
+          title="Remove calibration offset">Reset</button>
+      </div>
+    </div>
+    <div class="sep-sub" id="sepSub">no data</div>
+    <div class="sep-d1">
+      <span class="sep-d1-lbl">raw d(T0,T1)</span>
+      <span class="sep-d1-val" id="sepRawVal">&#45;&#45;</span>
+      <span class="sep-d1-unit">cm</span>
+      <span class="sep-d1-stats" id="sepRawStats">min &#45;&#45; &middot; max &#45;&#45; &middot; spread &#45;&#45; cm (last 30 s)</span>
+    </div>
+    <svg id="sepSpark" class="sep-spark" viewBox="0 0 300 60" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <line class="sep-spark-axis" id="sepSparkOffset" x1="0" y1="30" x2="300" y2="30" />
+      <polyline class="sep-spark-line" id="sepSparkLine" points="" fill="none" />
+    </svg>
+    <div class="sep-raw" id="sepRaw">offset 0 cm</div>
+  </div>
+
+  <div class="card">
+    <h3>Heading</h3>
+    <div class="cmp-grid">
+      <div class="cmp-cell t0">
+        <div class="cmp-head">
+          <span class="cmp-tid t0">T0 &middot; Emitter</span>
+          <span class="phase-pill" id="t0ph">&#45;&#45;</span>
+        </div>
+        <svg class="cmp-svg t0 stale" id="cmp0svg" viewBox="0 0 100 100">
+          <circle class="ring" cx="50" cy="50" r="46"/>
+          <g id="cmp0ticks"></g>
+          <text class="lbl lbl-n" x="50" y="9">0</text>
+          <text class="lbl"       x="91" y="50">90</text>
+          <text class="lbl"       x="50" y="91">180</text>
+          <text class="lbl"       x="9"  y="50">270</text>
+          <g class="needle" id="cmp0needle">
+            <polygon class="needle-back" points="50,56 46,70 54,70"/>
+            <polygon class="needle-fwd"  points="50,12 44,54 56,54"/>
+          </g>
+          <circle class="hub" cx="50" cy="50" r="4"/>
+        </svg>
+        <div class="cmp-readout">
+          <span class="cmp-deg t0 stale" id="cmp0deg">&#45;&#45;&deg;</span>
+          <button class="btn btn-ghost btn-sm" onclick="zeroHeading(0)">Zero</button>
+        </div>
+        <div class="cmp-raw" id="cmp0raw">raw &#45;&#45;&deg; &middot; offset 0&deg;</div>
+      </div>
+      <div class="cmp-cell t1">
+        <div class="cmp-head">
+          <span class="cmp-tid t1">T1 &middot; Receiver</span>
+          <span class="phase-pill" id="t1ph">&#45;&#45;</span>
+        </div>
+        <svg class="cmp-svg t1 stale" id="cmp1svg" viewBox="0 0 100 100">
+          <circle class="ring" cx="50" cy="50" r="46"/>
+          <g id="cmp1ticks"></g>
+          <text class="lbl lbl-n" x="50" y="9">0</text>
+          <text class="lbl"       x="91" y="50">90</text>
+          <text class="lbl"       x="50" y="91">180</text>
+          <text class="lbl"       x="9"  y="50">270</text>
+          <g class="needle" id="cmp1needle">
+            <polygon class="needle-back" points="50,56 46,70 54,70"/>
+            <polygon class="needle-fwd"  points="50,12 44,54 56,54"/>
+          </g>
+          <circle class="hub" cx="50" cy="50" r="4"/>
+        </svg>
+        <div class="cmp-readout">
+          <span class="cmp-deg t1 stale" id="cmp1deg">&#45;&#45;&deg;</span>
+          <button class="btn btn-ghost btn-sm" onclick="zeroHeading(1)">Zero</button>
+        </div>
+        <div class="cmp-raw" id="cmp1raw">raw &#45;&#45;&deg; &middot; offset 0&deg;</div>
+      </div>
+    </div>
+  </div>
+  -->
+  <!-- A0's DW3000 UWB chipset has been taken offline — it was responding to
+       T1's ranging polls as anchor id 1, colliding with T0 and pinning T1's
+       d1 to the fixed A0 distance regardless of where T1 actually was. A0
+       still does its real job (BLE gateway + command relay) via the XIAO
+       MCU, which is unaffected. The A0-beacon distance card was removed. -->
+
+  <!-- Movement modes -->
+  <div class="card">
+    <h3>Movement (both robots)</h3>
+    <div class="mode-btns">
+      <!-- Seek goes to T1 only: T1 is the UWB tag so it knows d(T0,T1).
+           T0's own seek still uses the pre-topology-change trilateration
+           logic and wouldn't work in this setup. Put T0 in Manual/Stop
+           before hitting Seek T1. -->
+      <button class="btn btn-seek"   onclick="cmdTo(1, 0x05)" title="Start T1 seeking T0 (distance-gradient). Keep T0 stationary.">Seek T1</button>
+      <button class="btn btn-wander" onclick="cmdBoth(0x0A)">Wander</button>
+      <button class="btn btn-stop"   onclick="hardStop()" title="Halt robots AND abort any browser-side sequence runner so its pending setTimeout()s can't keep firing stale motor commands behind the Stop.">Stop</button>
+    </div>
+    <div class="slider-row">
+      <label>Speed</label>
+      <input type="range" min="10" max="100" value="70" id="speedSlider"
+        oninput="throttle('spd',()=>{cmdBoth(0x0B,+this.value);$('speedVal').textContent=this.value+'%'})">
+      <span class="sv" id="speedVal">70%</span>
+    </div>
+  </div>
+
+  <!-- Manual Drive -->
+  <div class="card">
+    <h3>Manual Drive</h3>
+    <div class="motor-group">
+      <div class="mg-head">
+        <span class="mg-label" style="color:var(--tag0)">T0 · Emitter</span>
+        <button class="btn btn-ghost btn-sm" onclick="cmdTo(0,0x02)">Walk</button>
+      </div>
+      <div class="dir-btns">
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-fwd" onmousedown="drive(0,+1)" onmouseup="drive(0,0)" onmouseleave="drive(0,0)" ontouchstart="drive(0,+1)" ontouchend="drive(0,0)">▲ Fwd</button>
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-turn" onmousedown="turn(0,+1)" onmouseup="turn(0,0)" onmouseleave="turn(0,0)" ontouchstart="turn(0,+1)" ontouchend="turn(0,0)">◀ Left</button>
+        <button class="btn btn-stop2" onclick="drive(0,0)">■ Stop</button>
+        <button class="btn btn-turn" onmousedown="turn(0,-1)" onmouseup="turn(0,0)" onmouseleave="turn(0,0)" ontouchstart="turn(0,-1)" ontouchend="turn(0,0)">Right ▶</button>
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-rev" onmousedown="drive(0,-1)" onmouseup="drive(0,0)" onmouseleave="drive(0,0)" ontouchstart="drive(0,-1)" ontouchend="drive(0,0)">▼ Rev</button>
+        <button class="btn btn-empty"></button>
+      </div>
+      <div class="slider-row">
+        <label>M1</label>
+        <input type="range" min="-100" max="100" value="0" id="m0m1"
+          oninput="throttle('m0',()=>sendMotor(0))"
+          onchange="$('m0m1').value=0;$('m0m1v').textContent='0';sendMotor(0)">
+        <span class="sv" id="m0m1v">0</span>
+      </div>
+      <div class="slider-row">
+        <label>M2</label>
+        <input type="range" min="-100" max="100" value="0" id="m0m2"
+          oninput="throttle('m0',()=>sendMotor(0))"
+          onchange="$('m0m2').value=0;$('m0m2v').textContent='0';sendMotor(0)">
+        <span class="sv" id="m0m2v">0</span>
+      </div>
+      <div class="slider-row" title="Motor bias: +boosts M1 and cuts M2 by the same amount; - reverses that. Applies to ALL motor commands until changed. Double-click to recenter.">
+        <label>Bias</label>
+        <input type="range" min="-50" max="50" value="0" id="m0bias"
+          oninput="throttle('m0b',()=>sendBias(0))"
+          ondblclick="setBias(0,0)">
+        <span class="sv" id="m0biasv">0</span>
+      </div>
+    </div>
+    <div class="motor-group">
+      <div class="mg-head">
+        <span class="mg-label" style="color:var(--tag1)">T1 · Receiver</span>
+        <button class="btn btn-ghost btn-sm" onclick="cmdTo(1,0x02)">Walk</button>
+      </div>
+      <div class="dir-btns">
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-fwd" onmousedown="drive(1,+1)" onmouseup="drive(1,0)" onmouseleave="drive(1,0)" ontouchstart="drive(1,+1)" ontouchend="drive(1,0)">▲ Fwd</button>
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-turn" onmousedown="turn(1,+1)" onmouseup="turn(1,0)" onmouseleave="turn(1,0)" ontouchstart="turn(1,+1)" ontouchend="turn(1,0)">◀ Left</button>
+        <button class="btn btn-stop2" onclick="drive(1,0)">■ Stop</button>
+        <button class="btn btn-turn" onmousedown="turn(1,-1)" onmouseup="turn(1,0)" onmouseleave="turn(1,0)" ontouchstart="turn(1,-1)" ontouchend="turn(1,0)">Right ▶</button>
+        <button class="btn btn-empty"></button>
+        <button class="btn btn-rev" onmousedown="drive(1,-1)" onmouseup="drive(1,0)" onmouseleave="drive(1,0)" ontouchstart="drive(1,-1)" ontouchend="drive(1,0)">▼ Rev</button>
+        <button class="btn btn-empty"></button>
+      </div>
+      <div class="slider-row">
+        <label>M1</label>
+        <input type="range" min="-100" max="100" value="0" id="m1m1"
+          oninput="throttle('m1',()=>sendMotor(1))"
+          onchange="$('m1m1').value=0;$('m1m1v').textContent='0';sendMotor(1)">
+        <span class="sv" id="m1m1v">0</span>
+      </div>
+      <div class="slider-row">
+        <label>M2</label>
+        <input type="range" min="-100" max="100" value="0" id="m1m2"
+          oninput="throttle('m1',()=>sendMotor(1))"
+          onchange="$('m1m2').value=0;$('m1m2v').textContent='0';sendMotor(1)">
+        <span class="sv" id="m1m2v">0</span>
+      </div>
+      <div class="slider-row" title="Motor bias: +boosts M1 and cuts M2 by the same amount; - reverses that. Applies to ALL motor commands until changed. Double-click to recenter.">
+        <label>Bias</label>
+        <input type="range" min="-50" max="50" value="0" id="m1bias"
+          oninput="throttle('m1b',()=>sendBias(1))"
+          ondblclick="setBias(1,0)">
+        <span class="sv" id="m1biasv">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Test Sequence: build a step list and run it without reflashing.
+       The working sequence is auto-persisted to localStorage['sequence']
+       so edits survive a reload. The named-library (Save / Load dropdown
+       / Delete) lives in localStorage['sequenceLibrary'] as a dict of
+       named snapshots — independent from the working slot. -->
+  <div class="card">
+    <h3>Test Sequence <span class="seq-cur" id="seqCurName"></span></h3>
+    <div class="seq-head">
+      <span class="seq-lbl">Target:</span>
+      <div class="seq-tgt" id="seqTgtBtns">
+        <button class="btn btn-ghost btn-sm" data-tgt="0"   onclick="setSeqTarget(0)">T0</button>
+        <button class="btn btn-ghost btn-sm" data-tgt="1"   onclick="setSeqTarget(1)">T1</button>
+        <button class="btn btn-ghost btn-sm" data-tgt="255" onclick="setSeqTarget(255)">Both</button>
+      </div>
+    </div>
+    <div class="seq-lib">
+      <span class="seq-lbl">Library:</span>
+      <select id="seqLibSel" onchange="loadNamed(this.value)">
+        <option value="">(select saved…)</option>
+      </select>
+      <input type="text" id="seqLibName" placeholder="name…" maxlength="40"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();saveNamed();}">
+      <button class="btn btn-ghost btn-sm" onclick="saveNamed()"   title="Save current sequence to library under this name">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="deleteNamed()" title="Delete the currently selected saved sequence">Delete</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportFirmware()" title="Generate autoplay_sequences.h with every sequence in the library, ready to drop into both sketch folders">Export&nbsp;fw</button>
+      <button class="btn btn-ghost btn-sm" onclick="importFirmware()" title="Load sequences from an autoplay_sequences.h file back into the library — useful when localStorage was cleared but the .h file is still on disk">Import&nbsp;fw</button>
+    </div>
+    <div class="seq-cols">
+      <div class="seq-col motor">
+        <div class="seq-col-hd">Motor</div>
+        <div class="seq-steps" id="seqStepsMotor"></div>
+        <div class="seq-add">
+          <button class="btn btn-ghost btn-sm" onclick="addStep('fwd')">Fwd</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('rev')">Rev</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('turn_l')">Turn L</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('turn_r')">Turn R</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('walk')" title="Alternating single-motor gait (M1 / M2 every 250 ms)">Walk</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('pause')">Pause</button>
+        </div>
+      </div>
+      <div class="seq-col anim">
+        <div class="seq-col-hd">Animation (T0 matrix / T1 OLED + LED)</div>
+        <div class="seq-steps" id="seqStepsAnim"></div>
+        <div class="seq-add">
+          <button class="btn btn-ghost btn-sm" onclick="addStep('anim_bounce')" title="Bouncing pixels (complexity 1-5)">Bouncers</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('anim_gol')"    title="Game of Life (complexity 6-10)">GoL</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('anim_ovoid')"  title="Merge current state into the 6-pixel ovoid and hold">Ovoid</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('anim_off')"    title="Clear the matrix">Off</button>
+          <button class="btn btn-ghost btn-sm" onclick="addStep('led_set')"     title="T1 indicator LED mode">T1 LED</button>
+        </div>
+      </div>
+    </div>
+    <div class="seq-run">
+      <button class="btn btn-seek btn-sm" id="seqRunBtn"  onclick="runSeq()">&#9654; Run</button>
+      <label class="seq-repeat" title="Repeat the whole sequence this many times (1 = play once). Ignored for sequences using Lévy loop.">
+        &times;<input type="number" id="seqRepeatN" min="1" max="999" value="1"
+          oninput="saveRepeatN()" onchange="saveRepeatN()">
+      </label>
+      <button class="btn btn-stop btn-sm" id="seqStopBtn" onclick="stopSeq()">&#9632; Stop</button>
+      <button class="btn btn-rec  btn-sm" id="seqRecBtn"  onclick="toggleRec()" title="Record: every command sent while this is on becomes a raw step">&#9679; Record</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearSeq()">Clear</button>
+      <span class="seq-prog" id="seqProg">ready</span>
+    </div>
+  </div>
+
+  <!-- Animation: live test-bench for both robots. -->
+  <div class="card">
+    <h3>Animation</h3>
+    <!-- Each top button sends one 0x07 command (matrix mode) to the
+         chosen robot. T0 has the MAX7219 LED matrix; T1 mirrors the same
+         8x8 engine onto the SSD1306 OLED (only when T1_OLED_RENDER=1 in
+         firmware). Complexity applies to Bouncers (1-5) and Game of Life
+         (6-10). Ovoid ignores complexity — it just merges whatever is on
+         the grid into the 6-pixel ovoid and holds. T1 LED row sends 0x12
+         to drive the indicator LED; mode 4 (GoL pixel) auto-arms the
+         matrix engine to GoL so the LED has live data to tap. -->
+    <div class="track-row">
+      <span class="dk" style="min-width:7em">T0 matrix</span>
+      <button class="btn btn-track" onclick="sendAnimMode(0,'off')">Off</button>
+      <button class="btn btn-track" onclick="sendAnimMode(0,'bounce')">Bouncers</button>
+      <button class="btn btn-track" onclick="sendAnimMode(0,'gol')">GoL</button>
+      <button class="btn btn-track" onclick="sendAnimMode(0,'ovoid')">Ovoid</button>
+    </div>
+    <div class="track-row">
+      <span class="dk" style="min-width:7em">T1 OLED</span>
+      <button class="btn btn-track" onclick="sendAnimMode(1,'off')">Off</button>
+      <button class="btn btn-track" onclick="sendAnimMode(1,'bounce')">Bouncers</button>
+      <button class="btn btn-track" onclick="sendAnimMode(1,'gol')">GoL</button>
+      <button class="btn btn-track" onclick="sendAnimMode(1,'ovoid')">Ovoid</button>
+    </div>
+    <div class="track-row">
+      <span class="dk" style="min-width:7em">T1 LED</span>
+      <button class="btn btn-track" onclick="sendT1Led(0)">Off</button>
+      <button class="btn btn-track" onclick="sendT1Led(1)">Solid</button>
+      <button class="btn btn-track" onclick="sendT1Led(2)">Slow</button>
+      <button class="btn btn-track" onclick="sendT1Led(3)">Fast</button>
+      <button class="btn btn-track" onclick="sendT1Led(4)">GoL pixel</button>
+      <button class="btn btn-track" onclick="sendT1Led(5)">Random</button>
+    </div>
+    <div class="slider-row">
+      <label>Complex</label>
+      <input type="range" min="1" max="10" value="3" id="mxCmplx" oninput="$('mxCv').textContent=this.value">
+      <span class="sv" id="mxCv">3</span>
+    </div>
+    <div class="slider-row">
+      <label>Speed</label>
+      <input type="range" min="5" max="50" value="15" id="mxSpd" oninput="$('mxSv').textContent=(this.value*10)+'ms'">
+      <span class="sv" id="mxSv">150ms</span>
+    </div>
+  </div>
+
+  <!-- Audio -->
+  <div class="card">
+    <h3>Audio</h3>
+    <div class="track-row">
+      <span style="color:var(--tag0)">T0</span>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,1)">1</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,2)">2</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,3)">3</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,4)">4</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,5)">5</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,6)">6</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,7)">7</button>
+      <button class="btn btn-track" onclick="cmdTo(0,0x04,8)">8</button>
+    </div>
+    <div class="track-row">
+      <span style="color:var(--tag1)">T1</span>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,1)">1</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,2)">2</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,3)">3</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,4)">4</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,5)">5</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,6)">6</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,7)">7</button>
+      <button class="btn btn-track" onclick="cmdTo(1,0x04,8)">8</button>
+    </div>
+  </div>
+
+  <!-- Diagnostics -->
+  <div class="card">
+    <h3>Diagnostics <span id="diagHealth" style="color:var(--dim);font-weight:400;text-transform:none"></span></h3>
+    <div class="diag-grid">
+      <span class="dk">Serial</span>              <span class="dv" id="diagSerial">not connected</span>
+      <span class="dk">Rate</span>                <span class="dv" id="diagRate">0 B/s · 0 L/s</span>
+      <span class="dk">T0 (Emitter)</span>        <span class="dv dim" id="diagT0">never</span>
+      <span class="dk">T1 (Receiver)</span>       <span class="dv dim" id="diagT1">never</span>
+      <span class="dk">Heap T0 / T1</span>        <span class="dv dim" id="diagHeap" title="Free heap on each robot. Plateaus at ~150 KB if BLE leak fix is holding; continuous downward drift = leak is back.">-- / --</span>
+      <span class="dk">BLE SCAN (anchor)</span>   <span class="dv dim" id="diagScan">no scan lines yet</span>
+      <span class="dk">AT+RANGE (anchor UWB)</span><span class="dv dim" id="diagRange">never</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+      <span style="font-size:10px;color:var(--muted);flex:1">Raw log (last 60 lines)</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearDiagLog()">Clear</button>
+    </div>
+    <div class="diag-log" id="diagLog"></div>
+  </div>
+
+  <!-- Firmware-export modal. Hidden by default. Populated + revealed by
+       exportFirmware(); dismissed by clicking the backdrop or Close. -->
+  <div class="fw-overlay" id="fwOverlay" onclick="if(event.target===this)closeFwExport()">
+    <div class="fw-modal">
+      <h3>autoplay_sequences.h</h3>
+      <p>Click <em>Download</em> to save <code>autoplay_sequences.h</code>, then
+        drop a copy into <strong>both</strong>
+        <code>mauwb_emitter/</code> and <code>mauwb_receiver/</code>
+        (alongside each .ino). Set <code>AUTOPLAY_SEQUENCE</code> near the top
+        of each .ino to pick which sequence runs on boot — 1 = first in the
+        list at the top of the file — then reflash.</p>
+      <textarea id="fwOut" spellcheck="false" readonly></textarea>
+      <div class="fw-btns">
+        <span class="fw-msg" id="fwMsg"></span>
+        <button class="btn btn-ghost btn-sm" onclick="copyFwExport()">Copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadFwExport()">Download</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeFwExport()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firmware-import modal. Same shape as the export modal, but for going
+       the other way: paste in (or load from disk) an autoplay_sequences.h
+       file and rebuild the seqLibrary entries from it. -->
+  <div class="fw-overlay" id="fwImpOverlay" onclick="if(event.target===this)closeFwImport()">
+    <div class="fw-modal">
+      <h3>Import autoplay_sequences.h</h3>
+      <p>Paste the contents of <code>autoplay_sequences.h</code> below, or
+        click <em>Choose file…</em> to load it from disk. By default this
+        merges the imported sequences with whatever's already in the
+        library (overwriting same-named entries). Tick <em>Replace</em> to
+        wipe the existing library first.</p>
+      <textarea id="fwIn" spellcheck="false" placeholder="// Generated by position_map/index.html — &quot;Export fw&quot; button.&#10;...paste autoplay_sequences.h contents here..."></textarea>
+      <div class="fw-btns">
+        <span class="fw-msg" id="fwImpMsg"></span>
+        <label style="font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="fwImpReplace"> Replace library
+        </label>
+        <input type="file" id="fwImpFile" accept=".h,.hpp,.txt,text/*" style="display:none" onchange="loadFwImportFile(this)">
+        <button class="btn btn-ghost btn-sm" onclick="$('fwImpFile').click()">Choose file…</button>
+        <button class="btn btn-ghost btn-sm" onclick="doImportFirmware()">Import</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeFwImport()">Close</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ── State ────────────────────────────────────────────────
+// New UWB topology:
+//   • A0 gateway   = UWB anchor id 0 (and BLE hub — still relays comms + TAG: lines)
+//   • T0 Emitter   = UWB anchor id 1 (its chip replaces the retired external A1)
+//   • T1 Receiver  = UWB tag id 1 (only rover doing ranging)
+// So only T1 produces real distance numbers; its d1 slot = distance to T0 =
+// robot-to-robot separation. T0's BLE still carries IMU heading + phase, so both
+// compasses work. Heading is a raw 0-360 byte (broadcast by firmware as
+// `hdg = bnoYaw / 2`, anchor decodes as `hdg*2`), relative to power-on
+// orientation of each BNO055 — hence the per-tag "Zero" calibration button.
+let port = null, reader = null, readBuf = '';
+const tags = [
+  { d1: null, hdg: null, offset: 0, tLast: 0, heap: null, heapMin: null },
+  { d1: null, hdg: null, offset: 0, tLast: 0, heap: null, heapMin: null },
+];
+// Separation is sourced exclusively from T1.d1 — the only meaningful distance
+// in the two-anchor-one-tag setup. `raw` is the direct UWB reading in cm;
+// `offset` is the "when-touching" calibration (user places robots together
+// and clicks Calibrate, then that raw number becomes 0). Displayed value is
+// (raw − offset), which can be negative if the robots are physically closer
+// than they were at calibration time (e.g., after recalibration while apart).
+let separation = { raw: null, offset: 0, tLast: 0 };
+// 30-second ring buffer of raw d(T0,T1) samples for sparkline + min/max
+// statistics. Entries are {t, v} where t is performance.now() and v is cm.
+const SEP_HISTORY_MS = 30000;
+const sepHistory = [];
+
+// Distance from T1 to the fixed beacon A0 (T1.d0, raw cm). T0 has no d0 of
+// its own because T0 is a UWB anchor, not a tag. `tLast` is used to grey the
+// value out when stale. We don't offer a calibration offset here — A0 is a
+// fixed point and the absolute distance is the useful number.
+
+// Persist per-tag heading offsets so "Zero" survives page reloads.
+function loadOffsets() {
+  try {
+    const rawH = localStorage.getItem('hdgOffsets');
+    if (rawH) {
+      const o = JSON.parse(rawH);
+      if (Number.isFinite(o[0])) tags[0].offset = o[0];
+      if (Number.isFinite(o[1])) tags[1].offset = o[1];
+    }
+    const rawS = localStorage.getItem('sepOffset');
+    if (rawS != null) {
+      const v = parseFloat(rawS);
+      if (Number.isFinite(v)) separation.offset = v;
+    }
+  } catch (_) {}
+}
+function saveHdgOffsets() {
+  try { localStorage.setItem('hdgOffsets',
+    JSON.stringify([tags[0].offset, tags[1].offset])); } catch (_) {}
+}
+function saveSepOffset() {
+  try { localStorage.setItem('sepOffset', String(separation.offset)); } catch (_) {}
+}
+loadOffsets();
+
+// ── Serial ───────────────────────────────────────────────
+function setConnStatus(text, err) {
+  const btn = $('connBtn');
+  btn.textContent = text;
+  btn.classList.toggle('active', text === 'Disconnect');
+  btn.title = err || '';
+  if (err) console.error('[serial]', err);
+}
+
+async function toggleSerial() { port ? await closeSerial() : await openSerial(); }
+
+async function openSerial() {
+  if (!navigator.serial) {
+    setConnStatus('Connect', 'Web Serial unavailable — use Chrome/Edge over https:// or http://localhost');
+    alert('Web Serial unavailable. Use Chrome/Edge over https:// or http://localhost.');
+    return;
+  }
+  let p = null;
+  try { p = await navigator.serial.requestPort(); }
+  catch (e) { setConnStatus('Connect', 'Port selection cancelled: ' + e.message); return; }
+  try { await p.open({ baudRate: 115200 }); }
+  catch (e) {
+    port = null;
+    setConnStatus('Connect (port busy)', e.message);
+    alert('Could not open port: ' + e.message +
+      '\n\nClose any other app holding the port (Arduino Serial Monitor, other browser tabs, etc.) and try again.');
+    return;
+  }
+  port = p;
+  setConnStatus('Disconnect');
+  readLoop().catch(e => {
+    console.error('[readLoop]', e);
+    setConnStatus('Connect (read error)', e.message);
+    port = null;
+  });
+  // Push the persisted distance-calibration offset once the link is up so
+  // firmware's SEEK_ARRIVE_DIST compares against the operator's zero, not
+  // raw UWB ranging. Short delay so the anchor has settled; periodic retry
+  // handles the case where T1 was rebooted after we connected.
+  setTimeout(pushDistOffsetToT1, 1500);
+  // Re-prime motor-bias trim on each robot. Firmware boots with bias=0,
+  // so a fresh power-cycle (or reflash) loses the last trim — push the
+  // saved value back once the serial link is ready.
+  setTimeout(loadBias, 1600);
+}
+
+// Resend the distance offset every 10 s while connected. Cheap (3 bytes,
+// one BLE slot) and guarantees a reflashed T1 picks it up without a
+// manual reconnect. Stops implicitly when port is closed (cmdTo no-ops).
+setInterval(() => { if (port) pushDistOffsetToT1(); }, 10000);
+
+async function closeSerial() {
+  try {
+    if (reader) { await reader.cancel(); try { reader.releaseLock(); } catch(_) {} reader = null; }
+    if (port)   { await port.close(); port = null; }
+  } catch (e) { console.error('[close]', e); }
+  setConnStatus('Connect');
+}
+
+async function sendSerial(text) {
+  if (!port || !port.writable) return;
+  try {
+    const w = port.writable.getWriter();
+    await w.write(new TextEncoder().encode(text));
+    w.releaseLock();
+  } catch (e) {}
+}
+
+// ── Inbound parsing ──────────────────────────────────────
+// Anchor emits one line per relayed robot BLE broadcast:
+//   TAG:{tid},d0:{cm},d1:{cm},st:{status},hdg:{deg},rssi:{dbm}[,heap:{bytes}]
+// We read:
+//   • d1 from tid=1 → robot separation
+//   • hdg from either tid → drive that tag's compass
+//   • status (low 3 bits) → phase pill
+//   • heap from either tid → free-heap monitor (BLE leak watch)
+// d0 / d1 from tid=0 are ignored — T0 is now a UWB anchor and emits zeros there.
+function parseLine(line) {
+  const m = line.match(
+    /^TAG:(\d+),d0:(\d+),d1:(\d+)(?:,st:(\d+))?(?:,hdg:(\d+))?(?:,rssi:-?\d+)?(?:,heap:(\d+))?/);
+  if (!m) return;
+  const tid = +m[1];
+  if (tid !== 0 && tid !== 1) return;
+  const d0  = +m[2];
+  const d1  = +m[3];
+  const st  = m[4] !== undefined ? +m[4] : null;
+  const hdg = m[5] !== undefined ? +m[5] : null;
+  const heap = m[6] !== undefined ? +m[6] : null;
+  const now = performance.now();
+
+  tags[tid].tLast = now;
+  if (hdg !== null) {
+    // Anchor reports degrees already (hdg byte × 2). Clamp into [0,360).
+    tags[tid].hdg = ((hdg % 360) + 360) % 360;
+    updateCompass(tid);
+  }
+  if (st !== null) updatePhase(tid, st);
+  if (heap !== null && heap > 0) {
+    tags[tid].heap = heap;
+    if (tags[tid].heapMin == null || heap < tags[tid].heapMin) tags[tid].heapMin = heap;
+    updateHeapReadout();
+  }
+
+  if (tid === 1 && d1 > 0) {
+    separation.raw   = d1;
+    separation.tLast = now;
+    sepHistory.push({ t: now, v: d1 });
+    // Trim old samples. Loop is fine since samples arrive only a few Hz
+    // and the buffer never grows past ~150 entries at the nominal BLE rate.
+    while (sepHistory.length && now - sepHistory[0].t > SEP_HISTORY_MS) {
+      sepHistory.shift();
+    }
+    updateSeparation();
+  }
+
+  // T1.d0 used to be distance to A0's UWB beacon but A0's DW3000 chipset is
+  // intentionally offline now (see Separation-card banner), so d0 is always
+  // 0 and we ignore it. Retained in the wire format for backward-compat.
+}
+
+// ── Separation readout ───────────────────────────────────
+function calibratedSep() {
+  return separation.raw == null ? null : separation.raw - separation.offset;
+}
+
+function updateSeparation() {
+  const el     = $('sepVal');
+  const sub    = $('sepSub');
+  const raw    = $('sepRaw');
+  const rawVal = $('sepRawVal');
+  const stats  = $('sepRawStats');
+  // Separation card may be commented out of the HTML — no-op in that case.
+  if (!el || !sub || !raw || !rawVal || !stats) return;
+  const v      = calibratedSep();
+  if (v == null) {
+    el.textContent = '--';
+    el.classList.add('stale');
+    sub.textContent = 'no data';
+    rawVal.textContent = '--';
+    rawVal.classList.add('stale');
+    stats.textContent = 'min -- · max -- · spread -- cm (last 30 s)';
+    stats.classList.remove('wide');
+    raw.innerHTML = `offset ${separation.offset.toFixed(0)} cm`;
+    drawSepSpark();
+    return;
+  }
+  // Displayed value is the magnitude of deviation from the calibration pose;
+  // distance is physically non-negative. Signed delta is in the offset line.
+  el.textContent = Math.round(Math.abs(v));
+  el.classList.remove('stale');
+  sub.textContent = `updated ${fmtAgo(0)} · calibrated = |raw − offset|`;
+
+  rawVal.textContent = separation.raw;
+  rawVal.classList.remove('stale');
+
+  // Spread over the last 30 s is the key diagnostic for a colliding UWB
+  // stream: a correctly ranging link sits within ~±15 cm noise, whereas
+  // two anchors sharing the same id produce spreads of 50+ cm that track
+  // the physical gap between A0 and T0.
+  if (sepHistory.length >= 2) {
+    let mn = Infinity, mx = -Infinity;
+    for (const s of sepHistory) { if (s.v < mn) mn = s.v; if (s.v > mx) mx = s.v; }
+    const spread = mx - mn;
+    stats.textContent = `min ${mn} · max ${mx} · spread ${spread} cm (last 30 s)`;
+    // Flag in orange if the spread is wider than a plausible noise floor
+    // (20 cm) — highlights colliding-anchor symptom without false-flagging
+    // a user who's actually moved the robot.
+    stats.classList.toggle('wide', spread > 60);
+  } else {
+    stats.textContent = 'collecting samples…';
+    stats.classList.remove('wide');
+  }
+
+  const signed = Math.round(v);
+  const signStr = signed >= 0 ? '+' + signed : String(signed);
+  raw.innerHTML = `offset ${separation.offset.toFixed(0)} cm &middot; &Delta; ${signStr} cm`;
+  drawSepSpark();
+}
+
+// Render the sepHistory as a polyline in the 300×60 sparkline SVG. Y axis
+// is inverted (larger cm = higher on screen) and scaled to [min-5, max+5]
+// so the line uses the whole box regardless of absolute distance. The
+// calibration-offset level is drawn as a dashed blue reference so you can
+// see at a glance whether raw readings hover around zero or drift wildly.
+function drawSepSpark() {
+  const line = $('sepSparkLine');
+  const axis = $('sepSparkOffset');
+  if (!line || !axis) return;
+  if (sepHistory.length < 2) { line.setAttribute('points', ''); return; }
+
+  const W = 300, H = 60, pad = 2;
+  const now = performance.now();
+  const t0  = now - SEP_HISTORY_MS;
+  let mn = Infinity, mx = -Infinity;
+  for (const s of sepHistory) { if (s.v < mn) mn = s.v; if (s.v > mx) mx = s.v; }
+  // Include the offset line in scaling so the dashed reference is always visible.
+  if (separation.offset < mn) mn = separation.offset;
+  if (separation.offset > mx) mx = separation.offset;
+  // Pad range so a constant value doesn't collapse the axis to zero height.
+  if (mx - mn < 10) { mx += 5; mn -= 5; }
+
+  const toX = (t) => pad + (W - 2*pad) * (t - t0) / SEP_HISTORY_MS;
+  const toY = (v) => pad + (H - 2*pad) * (1 - (v - mn) / (mx - mn));
+
+  const pts = sepHistory.map(s => `${toX(s.t).toFixed(1)},${toY(s.v).toFixed(1)}`).join(' ');
+  line.setAttribute('points', pts);
+  const yOff = toY(separation.offset).toFixed(1);
+  axis.setAttribute('y1', yOff);
+  axis.setAttribute('y2', yOff);
+}
+
+function calibrateDistance() {
+  if (separation.raw == null) {
+    alert('No separation reading yet — wait for T1 to range to T0.');
+    return;
+  }
+  separation.offset = separation.raw;
+  saveSepOffset();
+  updateSeparation();
+  pushDistOffsetToT1();
+  diagPush(`CMD  Calibrate distance → offset=${separation.offset.toFixed(0)} cm (was ${separation.raw} cm)`);
+}
+
+function resetDistanceCal() {
+  separation.offset = 0;
+  saveSepOffset();
+  updateSeparation();
+  pushDistOffsetToT1();
+  diagPush('CMD  Reset distance calibration → offset=0 cm');
+}
+
+// Push the current distance-calibration offset to T1 so the firmware's seek
+// arrival & rate-comparison logic uses the same zero as the on-screen
+// readout. Called after Calibrate/Reset, after a successful serial connect,
+// and repeatedly at a low rate so a reflashed T1 picks up the value even
+// if we weren't connected at the moment it booted.
+function pushDistOffsetToT1() {
+  const v = Math.round(separation.offset) | 0;
+  const hi = (v >> 8) & 0xFF;
+  const lo = v & 0xFF;
+  cmdTo(1, 0x10, hi, lo);
+}
+
+// ── Compass widget ───────────────────────────────────────
+// Calibrated heading = (raw hdg − offset) mod 360, displayed as a compass
+// angle where 0 points "up". BNO055 yaw in IMUPLUS mode is CCW-positive, so
+// we rotate the needle by +calHdg (SVG rotate is CW-positive, matching what
+// feels natural when the robot physically turns).
+function calibratedHdg(tid) {
+  const t = tags[tid];
+  if (t.hdg == null) return null;
+  return ((t.hdg - t.offset) % 360 + 360) % 360;
+}
+
+function updateCompass(tid) {
+  const t      = tags[tid];
+  const needle = $('cmp' + tid + 'needle');
+  const degEl  = $('cmp' + tid + 'deg');
+  const rawEl  = $('cmp' + tid + 'raw');
+  const svg    = $('cmp' + tid + 'svg');
+  // Heading card may be commented out of the HTML — no-op in that case.
+  if (!needle || !degEl || !rawEl || !svg) return;
+  const cal    = calibratedHdg(tid);
+  if (cal == null) {
+    degEl.innerHTML = '--&deg;';
+    degEl.classList.add('stale');
+    svg.classList.add('stale');
+    rawEl.innerHTML = `raw --&deg; &middot; offset ${t.offset.toFixed(0)}&deg;`;
+    return;
+  }
+  needle.setAttribute('transform', `rotate(${cal.toFixed(1)} 50 50)`);
+  degEl.textContent = cal.toFixed(0) + '\u00B0';
+  degEl.classList.remove('stale');
+  svg.classList.remove('stale');
+  rawEl.innerHTML = `raw ${t.hdg.toFixed(0)}&deg; &middot; offset ${t.offset.toFixed(0)}&deg;`;
+}
+
+function zeroHeading(tid) {
+  const t = tags[tid];
+  if (t.hdg == null) {
+    alert(`T${tid} heading not received yet — wait for a BLE packet.`);
+    return;
+  }
+  t.offset = t.hdg;
+  saveHdgOffsets();
+  updateCompass(tid);
+  diagPush(`CMD  Zero heading T${tid} → offset=${t.offset.toFixed(0)}°`);
+}
+
+// Draw the 12 minor + 4 major tick marks once at startup (pure static geometry).
+function buildCompassTicks() {
+  for (const tid of [0, 1]) {
+    const g = $('cmp' + tid + 'ticks');
+    if (!g) continue;
+    const frag = [];
+    for (let a = 0; a < 360; a += 30) {
+      const rad = (a - 90) * Math.PI / 180;
+      const major = a % 90 === 0;
+      const r1 = 46, r2 = major ? 40 : 43;
+      const x1 = 50 + r1 * Math.cos(rad), y1 = 50 + r1 * Math.sin(rad);
+      const x2 = 50 + r2 * Math.cos(rad), y2 = 50 + r2 * Math.sin(rad);
+      frag.push(`<line class="${major ? 'tick-maj' : 'tick'}" x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`);
+    }
+    g.innerHTML = frag.join('');
+  }
+}
+buildCompassTicks();
+updateCompass(0); updateCompass(1);
+updateSeparation();
+
+
+// Re-style stale readouts every 400 ms so the user sees when packets stop.
+function refreshStaleness() {
+  const now = performance.now();
+  // Separation (from T1) — card may be commented out of the HTML.
+  const sepAgo = separation.tLast ? now - separation.tLast : Infinity;
+  if (separation.raw != null) {
+    const sv = $('sepVal'), srv = $('sepRawVal'), ss = $('sepSub');
+    if (sv)  sv.classList.toggle('stale', sepAgo > 3000);
+    if (srv) srv.classList.toggle('stale', sepAgo > 3000);
+    if (ss)  ss.textContent = `updated ${fmtAgo(sepAgo)} · calibrated = |raw − offset|`;
+  }
+  // Age-out samples from the 30 s sparkline buffer and redraw, so when the
+  // UWB stream pauses the min/max window tightens instead of showing stale
+  // extremes from a minute ago.
+  let trimmed = false;
+  while (sepHistory.length && now - sepHistory[0].t > SEP_HISTORY_MS) {
+    sepHistory.shift();
+    trimmed = true;
+  }
+  if (trimmed) updateSeparation();
+  // Per-tag heading freshness — cards may be commented out of the HTML.
+  for (const tid of [0, 1]) {
+    const t = tags[tid];
+    if (!t.tLast || t.hdg == null) continue;
+    const ago = now - t.tLast;
+    const stale = ago > 3000;
+    const svg = $('cmp' + tid + 'svg');
+    const deg = $('cmp' + tid + 'deg');
+    if (svg) svg.classList.toggle('stale', stale);
+    if (deg) deg.classList.toggle('stale', stale);
+  }
+}
+setInterval(refreshStaleness, 400);
+
+const PHASE_NAMES = ['WAIT', 'DRIVE', 'ARRIVE', 'MANUAL', 'SEEK', 'WANDER', 'PATH'];
+function updatePhase(tid, status) {
+  const p = status & 0x07;
+  const el = $('t'+tid+'ph');
+  if (!el) return;
+  el.textContent = PHASE_NAMES[p] || '?';
+  el.className = 'phase-pill ' + (PHASE_NAMES[p] || '').toLowerCase();
+}
+
+// Render the per-robot free-heap pair. Format: "T0 KB (min KB) / T1 KB (min KB)".
+// The min watermark is the lowest value we've ever seen for that robot in
+// this session — useful for spotting transient drops the live value has
+// already recovered from. If the BLE leak is back, the live value will
+// keep dropping; if it's fixed, both values plateau and stay close.
+function fmtHeap(t) {
+  if (t.heap == null) return '--';
+  const kb = (t.heap / 1024).toFixed(1);
+  const minKb = t.heapMin != null ? (t.heapMin / 1024).toFixed(1) : '--';
+  return `${kb} KB (min ${minKb})`;
+}
+function updateHeapReadout() {
+  const el = $('diagHeap');
+  if (!el) return;
+  el.textContent = `${fmtHeap(tags[0])} / ${fmtHeap(tags[1])}`;
+  // Colour cue: warn (orange) if either robot dropped below ~50 KB ever,
+  // critical (red) below ~25 KB. Healthy steady-state on ESP32-S3 with
+  // BLE up is ~150-200 KB.
+  let cls = 'dv';
+  const minSeen = Math.min(
+    tags[0].heapMin != null ? tags[0].heapMin : Infinity,
+    tags[1].heapMin != null ? tags[1].heapMin : Infinity);
+  if      (minSeen < 25 * 1024)  cls = 'dv err';
+  else if (minSeen < 50 * 1024)  cls = 'dv warn';
+  else if (tags[0].heap == null && tags[1].heap == null) cls = 'dv dim';
+  el.className = cls;
+}
+
+// ── Diagnostics ──────────────────────────────────────────
+const diag = {
+  bytes: 0, lines: 0,
+  tags: [0, 0], lastTag: [0, 0],
+  scan: 0, lastScanLine: '',
+  range: 0, lastRangeT: 0,
+  other: 0,
+  log: [], logMax: 60,
+  tStart: 0, bytesPrev: 0, linesPrev: 0, tPrev: 0,
+  bytesPerSec: 0, linesPerSec: 0,
+};
+
+function diagPush(line) {
+  let cls = 'l-other';
+  if      (line.startsWith('TAG:'))     cls = 'l-tag';
+  else if (line.startsWith('SCAN:'))    cls = 'l-scan';
+  else if (line.startsWith('AT+RANGE')) cls = 'l-rng';
+  else if (line.startsWith('CMD'))      cls = 'l-cmd';
+  diag.log.push({ t: performance.now(), cls, line });
+  if (diag.log.length > diag.logMax) diag.log.shift();
+}
+
+function clearDiagLog() { diag.log = []; renderDiagLog(); }
+
+function fmtAgo(ms) {
+  if (ms == null || ms < 0) return 'never';
+  if (ms < 1000)  return ms.toFixed(0) + ' ms ago';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + ' s ago';
+  return (ms / 60000).toFixed(1) + ' min ago';
+}
+
+function renderDiagLog() {
+  const el = $('diagLog'); if (!el) return;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+  const out = [];
+  for (const e of diag.log) {
+    const safe = e.line.replace(/[<&>]/g, c => ({'<':'&lt;','&':'&amp;','>':'&gt;'}[c]));
+    out.push(`<span class="${e.cls}">${safe}</span>`);
+  }
+  el.innerHTML = out.join('\n');
+  if (nearBottom) el.scrollTop = el.scrollHeight;
+}
+
+function updateDiag() {
+  const rx = $('rxStatus');
+  if (rx) rx.textContent = !port ? '' : `rx ${diag.lines}L / ${diag.tags[0]+diag.tags[1]}T`;
+
+  const now = performance.now();
+  const dt = (now - diag.tPrev) / 1000;
+  if (dt >= 0.25) {
+    diag.bytesPerSec = (diag.bytes - diag.bytesPrev) / dt;
+    diag.linesPerSec = (diag.lines - diag.linesPrev) / dt;
+    diag.bytesPrev = diag.bytes; diag.linesPrev = diag.lines; diag.tPrev = now;
+  }
+
+  const sEl  = $('diagSerial'), rEl = $('diagRate');
+  const t0E  = $('diagT0'),     t1E = $('diagT1');
+  const scE  = $('diagScan'),   rgE = $('diagRange');
+  const hEl  = $('diagHealth');
+
+  if (port) { sEl.textContent = 'connected'; sEl.className = 'dv ok'; }
+  else      { sEl.textContent = 'not connected'; sEl.className = 'dv dim'; }
+
+  rEl.textContent = `${diag.bytesPerSec.toFixed(0)} B/s · ${diag.linesPerSec.toFixed(1)} L/s`;
+
+  for (const tid of [0, 1]) {
+    const el = tid === 0 ? t0E : t1E;
+    if (!diag.tags[tid]) { el.textContent = 'never'; el.className = 'dv err'; continue; }
+    const ago = now - diag.lastTag[tid];
+    el.textContent = `${diag.tags[tid]} pkts · ${fmtAgo(ago)}`;
+    el.className = ago < 3000 ? 'dv ok' : (ago < 10000 ? 'dv warn' : 'dv err');
+  }
+
+  scE.textContent = diag.scan ? `${diag.scan} · ${diag.lastScanLine.slice(5, 55)}` : 'no scan lines yet';
+  scE.className   = diag.scan ? 'dv ok' : 'dv warn';
+
+  if (!diag.range) { rgE.textContent = 'never'; rgE.className = 'dv err'; }
+  else {
+    const ago = now - diag.lastRangeT;
+    rgE.textContent = `${diag.range} · ${fmtAgo(ago)}`;
+    rgE.className   = ago < 3000 ? 'dv ok' : 'dv warn';
+  }
+
+  if (hEl) {
+    if (diag.bytes === 0)
+      hEl.innerHTML = '<span style="color:#ef4444">no bytes — check cable/port/power</span>';
+    else if (!diag.scan && !diag.range && !diag.tags[0] && !diag.tags[1])
+      hEl.innerHTML = '<span style="color:#f59e0b">bytes arriving but unrecognised format — anchor firmware up to date?</span>';
+    else if (!diag.tags[0] && !diag.tags[1])
+      hEl.innerHTML = '<span style="color:#f59e0b">no robot broadcasts — check robots powered + BLE up</span>';
+    else
+      hEl.innerHTML = '<span style="color:#34d399">ok</span>';
+  }
+
+  renderDiagLog();
+}
+setInterval(updateDiag, 400);
+
+async function readLoop() {
+  const dec = new TextDecoderStream();
+  const pipePromise = port.readable.pipeTo(dec.writable).catch(e => console.error('[pipe]', e));
+  reader = dec.readable.getReader();
+  diag.tStart = diag.tPrev = performance.now();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) diag.bytes += value.length;
+      readBuf += value;
+      const lines = readBuf.split('\n');
+      readBuf = lines.pop();
+      for (const l of lines) {
+        const t = l.trim();
+        if (!t) continue;
+        diag.lines++;
+        diagPush(t);
+        const now = performance.now();
+        if      (t.startsWith('TAG:'))     { const m = t.match(/^TAG:(\d+)/); if (m) { const tid = +m[1]; if (tid === 0 || tid === 1) { diag.tags[tid]++; diag.lastTag[tid] = now; } } }
+        else if (t.startsWith('SCAN:'))    { diag.scan++; diag.lastScanLine = t; }
+        else if (t.startsWith('AT+RANGE')) { diag.range++; diag.lastRangeT = now; }
+        else                                { diag.other++; }
+        parseLine(t);
+      }
+    }
+  } finally {
+    try { reader.releaseLock(); } catch(_) {}
+    reader = null;
+  }
+  await pipePromise.catch(()=>{});
+}
+
+// ── Commands ─────────────────────────────────────────────
+// Wire format understood by mauwb_anchor.ino: ">tgt:b0:b1:...:bN\n" in hex,
+// tgt 0xFF = both robots, 0 = T0 (Emitter), 1 = T1 (Receiver).
+//
+// Anti-collision throttle: the XIAO anchor carries exactly one command in
+// its BLE advertisement at any moment (see updateCmdAd in mauwb_anchor.ino).
+// Two commands sent <~100 ms apart can overwrite each other on-air before a
+// robot's scan window has a chance to see the first one. Manual buttons are
+// separated by human reaction time so this never bites them, but the
+// sequence runner kicks both motor + anim tracks at the same instant on
+// Run, and the second command silently nukes the first. We queue cmdTo()
+// calls and dispatch them with a minimum gap so each gets at least one
+// full BLE adv interval (~100 ms) of airtime before being replaced.
+const CMD_MIN_GAP_MS = 150;
+let _cmdLastSentAt   = 0;
+const _cmdQueue      = [];
+let   _cmdDrainArmed = false;
+function _drainCmdQueue() {
+  if (!_cmdQueue.length) { _cmdDrainArmed = false; return; }
+  const now = performance.now();
+  const gap = now - _cmdLastSentAt;
+  if (gap < CMD_MIN_GAP_MS) {
+    setTimeout(_drainCmdQueue, CMD_MIN_GAP_MS - gap);
+    return;
+  }
+  const item = _cmdQueue.shift();
+  _cmdLastSentAt = now;
+  const hex = item.bytes.map(b => (b & 0xFF).toString(16).padStart(2, '0')).join(':');
+  sendSerial('>' + hex + '\n');
+  if (_cmdQueue.length) setTimeout(_drainCmdQueue, CMD_MIN_GAP_MS);
+  else                  _cmdDrainArmed = false;
+}
+function cmdTo(target, ...bytes) {
+  // Live-capture hook: when Record is armed, log every outgoing command
+  // here, exactly as it was issued. Runs BEFORE the serial send so that
+  // even a disconnected session still records (useful for rehearsing).
+  // Commands that the sequence runner itself issues are skipped via
+  // `recording.passthrough` so Run-while-Record doesn't self-feed.
+  if (recording.active && !recording.passthrough) {
+    recording.events.push({
+      target: target & 0xFF,
+      bytes:  bytes.map(b => b & 0xFF),
+      ts:     performance.now(),
+    });
+  }
+  // Stop (0x0C) preempts the queue: emergency-flush everything pending
+  // and send immediately so an in-flight sequence can't keep advertising
+  // motor commands behind the Stop. _cmdLastSentAt is reset so the next
+  // queued command (if any) waits a fresh CMD_MIN_GAP_MS.
+  if (bytes[0] === 0x0C) {
+    _cmdQueue.length = 0;
+    const hex = [target, ...bytes].map(b => (b & 0xFF).toString(16).padStart(2, '0')).join(':');
+    sendSerial('>' + hex + '\n');
+    _cmdLastSentAt = performance.now();
+    return;
+  }
+  _cmdQueue.push({ bytes: [target, ...bytes] });
+  if (!_cmdDrainArmed) {
+    _cmdDrainArmed = true;
+    // Use queueMicrotask so a burst of synchronous cmdTo() calls (e.g.
+    // motor + anim both firing at t=0) all land in the queue before we
+    // start draining — drain order then matches call order.
+    queueMicrotask(_drainCmdQueue);
+  }
+}
+function cmdBoth(...bytes) { cmdTo(0xFF, ...bytes); }
+
+// Top-bar Stop button. Two jobs: kill any in-flight sequence runner so
+// its pending setTimeout()s can't keep firing stale motor / anim cmds
+// behind the Stop, then send 0x0C to the robots. Order matters: stopSeq
+// queues a final motor-zero cmd which the cmdBoth(0x0C) call below
+// preempts and clears, so only one packet (the 0x0C itself) actually
+// goes out — same end-state with no stale tail.
+function hardStop() {
+  if (seqRun.active) stopSeq();
+  cmdBoth(0x0C);
+}
+
+// Live-capture state. `passthrough` is a guard flag flipped by the
+// sequence runner so its own cmdTo() calls don't get re-recorded.
+let recording = { active: false, startedAt: 0, events: [], passthrough: false };
+
+const _throttles = {};
+function throttle(key, fn) {
+  clearTimeout(_throttles[key]);
+  _throttles[key] = setTimeout(fn, 80);
+}
+
+function sendMotor(tid) {
+  const m1 = +$('m'+tid+'m1').value, m2 = +$('m'+tid+'m2').value;
+  $('m'+tid+'m1v').textContent = m1;
+  $('m'+tid+'m2v').textContent = m2;
+  cmdTo(tid, 0x01, m1, m2);
+}
+
+// Motor-bias slider (per robot). -50..+50 percent; positive weakens M2,
+// negative weakens M1. Firmware stores it globally and applies it inside
+// updateServos(), so every command path (manual, walk, turn, seek, walk,
+// sequence playback) honours the trim. Persisted to localStorage and
+// re-sent on connect so a reloaded browser restores the value after the
+// robot's next power-cycle too.
+function sendBias(tid) {
+  const el = $('m'+tid+'bias'); if (!el) return;
+  const v = Math.max(-50, Math.min(50, +el.value | 0));
+  $('m'+tid+'biasv').textContent = v;
+  cmdTo(tid, 0x11, v);
+  try { localStorage.setItem('motorBias.t'+tid, String(v)); } catch (_) {}
+}
+
+// Programmatic setter (used by the dbl-click-to-recenter handler and by
+// loadBias()). Does the same as moving the slider: clamp, update label,
+// send the command, persist.
+function setBias(tid, v) {
+  const el = $('m'+tid+'bias'); if (!el) return;
+  v = Math.max(-50, Math.min(50, v | 0));
+  el.value = v;
+  sendBias(tid);
+}
+
+// Restore per-robot bias from localStorage and push it to the robot.
+// Called once at init (to populate the slider) and again whenever a new
+// serial connection is opened (to re-prime the firmware after a power
+// cycle / re-flash — the firmware boots with bias=0 by default).
+function loadBias() {
+  for (const tid of [0, 1]) {
+    const el = $('m'+tid+'bias'); if (!el) continue;
+    let v = 0;
+    try {
+      const raw = localStorage.getItem('motorBias.t'+tid);
+      if (raw !== null) v = parseInt(raw, 10) || 0;
+    } catch (_) {}
+    v = Math.max(-50, Math.min(50, v));
+    el.value = v;
+    $('m'+tid+'biasv').textContent = v;
+    if (port && v !== 0) cmdTo(tid, 0x11, v);
+  }
+}
+
+// dir: +1 = forward, -1 = reverse, 0 = stop
+function drive(tid, dir) {
+  const spd = +$('speedSlider').value;
+  const v = dir * spd;
+  $('m'+tid+'m1').value = v; $('m'+tid+'m1v').textContent = v;
+  $('m'+tid+'m2').value = v; $('m'+tid+'m2v').textContent = v;
+  cmdTo(tid, 0x01, v, v);
+}
+
+// dir: +1 = left/CCW, -1 = right/CW, 0 = stop
+function turn(tid, dir) {
+  if (dir === 0) { cmdTo(tid, 0x01, 0, 0); return; }
+  const spd = +$('speedSlider').value;
+  cmdTo(tid, 0x08, dir * spd);
+}
+
+// Live-matrix one-shot: fires a single 0x07 command at the Emitter with
+// (mode << 4) | cmplx in p1 and ms/frame in p2. The firmware runs that
+// mode until another 0x07 arrives (or an SOP_ANIM_* autoplay step
+// overrides it). Bouncers clamp cmplx to 1-5; GoL clamps to 6-10.
+function sendAnimMode(target, mode) {
+  const s = +$('mxSpd').value;
+  let raw = +$('mxCmplx').value;
+  let modeByte = 0, cmplx = 0;
+  if      (mode === 'off')    { modeByte = 0; cmplx = 0; }
+  else if (mode === 'bounce') { modeByte = 1; cmplx = Math.max(1, Math.min(5,  raw)); }
+  else if (mode === 'gol')    { modeByte = 2; cmplx = Math.max(6, Math.min(10, raw)); }
+  else if (mode === 'ovoid')  { modeByte = 3; cmplx = 0; }
+  cmdTo(target & 0xFF, 0x07, ((modeByte & 0x0F) << 4) | (cmplx & 0x0F), s);
+}
+
+// T1 indicator-LED mode (0=off, 1=solid, 2=slow blink, 3=fast blink,
+// 4=GoL pixel — taps dispBuf[0] of the matrix engine, which the firmware
+// auto-arms to GoL when mode 4 is set so the LED always has live data).
+function sendT1Led(mode) {
+  const m = Math.max(0, Math.min(5, mode | 0));
+  cmdTo(1, 0x12, m, 0);
+}
+
+// ── Test Sequence ────────────────────────────────────────
+// Modular registry: to add a new step type, append to STEP_TYPES with a
+// `label`, the list of editable `params`, and an `exec(send, step)` that
+// issues the motor/aux commands for that step. Duration is always in seconds
+// and is handled generically by the runner — `exec` just starts the motion.
+// Param metadata: each entry describes how renderSteps() should render a
+// param and how runNextStep() should sanitize its value.
+//   kind='num'   → <input type=number>, parseFloat with min/max clamp.
+//   kind='choice'→ <select>, value is the option's `v` (number).
+//   kind='bytes' → read-only hex preview (populated by live-capture). The
+//                  value is an array of numbers; it's not user-editable.
+// Adding a new param: append a row here and include its key in a step type's
+// `params`. STEP_DEFAULTS supplies the initial value.
+const STEP_PARAM_META = {
+  speed: { kind: 'num',    label: 'Speed', suffix: '%',  min: 0,   max: 100, step: 5   },
+  dur:   { kind: 'num',    label: 'Dur',   suffix: 's',  min: 0.1, max: 120, step: 0.1 },
+  cmplx: { kind: 'num',    label: 'Cmplx', suffix: '',   min: 0,   max: 10,  step: 1   },
+  anim:  { kind: 'num',    label: 'Anim',  suffix: 'ms/f', min: 5, max: 50,  step: 1   },
+  mode:  { kind: 'choice', label: 'Mode',  options: [
+    { v: 0, t: 'Off'        },
+    { v: 1, t: 'Solid'      },
+    { v: 2, t: 'Slow blink' },
+    { v: 3, t: 'Fast blink' },
+    { v: 4, t: 'GoL pixel'  },
+    { v: 5, t: 'Random'     },
+  ] },
+  bytes: { kind: 'bytes',  label: 'Bytes' },
+};
+
+// The 0x07 command packs its byte as (mode<<4)|complexity:
+//   mode 0 = off, 1 = bouncers (cmplx 1-5), 2 = GoL (cmplx 6-10),
+//   mode 3 = ovoid-merge. Mirrors the SOP_ANIM_* ops in firmware.
+const ANIM_MODE_OFF    = 0;
+const ANIM_MODE_BOUNCE = 1;
+const ANIM_MODE_GOL    = 2;
+const ANIM_MODE_OVOID  = 3;
+
+const STEP_TYPES = {
+  // ── Motor track ─────────────────────────────
+  fwd: {
+    label: 'Forward', track: 'motor', params: ['speed', 'dur'],
+    exec: (send, s) => send(0x01, s.speed, s.speed),
+  },
+  rev: {
+    label: 'Reverse', track: 'motor', params: ['speed', 'dur'],
+    exec: (send, s) => send(0x01, -s.speed, -s.speed),
+  },
+  turn_l: {
+    label: 'Turn L', track: 'motor', params: ['speed', 'dur'],
+    // cmd 0x08 is the stock "turn" command: +v = CCW (left), -v = CW (right).
+    exec: (send, s) => send(0x08, s.speed),
+  },
+  turn_r: {
+    label: 'Turn R', track: 'motor', params: ['speed', 'dur'],
+    exec: (send, s) => send(0x08, -s.speed),
+  },
+  pause: {
+    label: 'Pause', track: 'motor', params: ['dur'],
+    exec: (send) => send(0x01, 0, 0),
+  },
+  walk: {
+    // "Walk" = alternating single-motor gait. Firmware has a built-in mode
+    // (cmd 0x02) that toggles M1 / M2 every 250 ms at the current
+    // driveSpeedPct. We set that speed first (0x0B) so each walk step can
+    // have its own pace, then kick off the walk. The step's own duration
+    // is timed by the runner; once elapsed, the next step takes over (or
+    // Stop sends 0x0C to halt). No cleanup command needed between steps.
+    label: 'Walk', track: 'motor', params: ['speed', 'dur'],
+    exec: (send, s) => {
+      send(0x0B, s.speed);
+      send(0x02);
+    },
+  },
+  raw: {
+    // Live-capture passthrough: replays arbitrary bytes captured from the
+    // UI's Record mode. `bytes` is an array of numbers (first byte =
+    // command). Editable only indirectly (via Record / Clear + recapture).
+    // Sits on the motor track because the most common captured commands
+    // (0x01/0x08) are motor-level; non-motor captured bytes are harmless.
+    label: 'Raw', track: 'motor', params: ['bytes', 'dur'],
+    exec: (send, s) => {
+      if (Array.isArray(s.bytes) && s.bytes.length) send(...s.bytes);
+    },
+  },
+  levy_loop: {
+    // Marker step: when the runner reaches this, it takes over and loops
+    // "Lévy A (cluster)" twice + "Lévy B (jump)" ~30% of cycles, forever,
+    // until Stop. Any steps after this marker are unreachable. The step
+    // itself sends nothing — exec is a no-op; runNextStep special-cases it.
+    // Motor-track only; anim track runs independently during the loop.
+    label: 'Lévy loop', track: 'motor', params: ['dur'],
+    exec: () => {},
+  },
+  // ── Animation track ─────────────────────────
+  // All three anim modes share the 0x07 command, packing (mode<<4)|cmplx
+  // into p1 and ms/frame into p2. Matrix-only — receiver firmware sees
+  // 0x07 / SOP_ANIM_* and silently drops it (no hardware to drive).
+  anim_bounce: {
+    label: 'Bouncers', track: 'anim', params: ['cmplx', 'anim', 'dur'],
+    exec: (send, s) => {
+      const c = Math.max(1, Math.min(5, Number(s.cmplx) | 0));
+      send(0x07, (ANIM_MODE_BOUNCE << 4) | c, Number(s.anim) | 0);
+    },
+  },
+  anim_gol: {
+    label: 'Game of Life', track: 'anim', params: ['cmplx', 'anim', 'dur'],
+    exec: (send, s) => {
+      const c = Math.max(6, Math.min(10, Number(s.cmplx) | 0));
+      send(0x07, (ANIM_MODE_GOL << 4) | c, Number(s.anim) | 0);
+    },
+  },
+  anim_ovoid: {
+    // Merges whatever the matrix is currently showing into the 6-pixel
+    // ovoid (caps top & bottom, 2 stacked pixels each side). `anim`
+    // controls the merge frame rate; `dur` holds it for that long before
+    // the next anim step takes over.
+    label: 'Ovoid', track: 'anim', params: ['anim', 'dur'],
+    exec: (send, s) => {
+      send(0x07, ANIM_MODE_OVOID << 4, Number(s.anim) | 0);
+    },
+  },
+  anim_off: {
+    label: 'Matrix off', track: 'anim', params: ['dur'],
+    exec: (send) => send(0x07, ANIM_MODE_OFF << 4, 0),
+  },
+  led_set: {
+    // T1 indicator LED. modes:
+    //   0 = off, 1 = solid, 2 = slow-blink (1 Hz), 3 = fast-blink (4 Hz),
+    //   4 = GoL pixel (LED reflects pixel (0,0) of T1's matrix engine).
+    // Mode 4 auto-arms the matrix engine to GoL on T1 (default complexity
+    // 7, 200 ms/frame) if it isn't already running, so the LED works
+    // standalone — and the OLED will also light up since both consumers
+    // share the same engine. Only affects T1; T0's firmware ignores 0x12.
+    // Lives on the anim track because it's a visual state, not a motion.
+    label: 'LED set', track: 'anim', params: ['mode', 'dur'],
+    exec: (send, s) => send(0x12, s.mode),
+  },
+};
+
+// Defaults for newly-added steps. Missing params just aren't rendered.
+const STEP_DEFAULTS = {
+  speed: 60, dur: 1.0,
+  cmplx: 3, anim: 20,      // cmplx=3 suits bouncers; gol default bumps to 7 in addStep
+  mode:  1,
+  bytes: [],
+};
+
+// Working sequence: motor and anim tracks are independent lists. Both start
+// at t=0 when Run is pressed; each advances by its own step durations.
+// Motor track is primary — when it finishes all repeats, anim aborts.
+//
+// Per-track scheduler model: each track maintains a busy-until timeline
+// PER TARGET ({0: ms, 1: ms} for T0 / T1). When the runner advances to a
+// step, the step's fireAt is whichever is later: now, or that target's
+// busy time. After firing, the target's busy time is bumped by the step's
+// duration. Steps targeting different robots therefore overlap naturally;
+// same-robot steps still serialize; target=Both (255) waits until both
+// robots are free and marks both busy. All scheduled setTimeouts go into
+// `timers[]` so Stop / repeat / Lévy regen can cancel them cleanly.
+let sequence = { target: 0xFF, motor: [], anim: [] };
+let seqRun   = { active: false,
+                 motor: { idx: -1, lastFiredIdx: -1, timers: [], busy: { 0: 0, 1: 0 }, done: true },
+                 anim:  { idx: -1, lastFiredIdx: -1, timers: [], busy: { 0: 0, 1: 0 }, done: true },
+                 levy: null, /* { origSteps, cycleCount } when Lévy loop is active; motor track only */
+                 repeatTotal: 1, repeatDone: 0 };
+
+// Names of the built-in Lévy sub-sequences. The Lévy-loop runner reads
+// whatever is currently saved under these names, so the user can tune
+// A/B independently and the loop picks up their edits next cycle.
+const LEVY_A_NAME = 'Lévy A (cluster)';
+const LEVY_B_NAME = 'Lévy B (jump)';
+const LEVY_B_PROB = 30;  // percent chance of appending B each cycle
+
+// Build one cycle of the Lévy-flight loop: A + A + (~30% chance) B,
+// pulled from the current library. Returns [] if A is missing — caller
+// should log and stop. Deep-clones each step so the library isn't
+// mutated during playback.
+function generateLevyCycle() {
+  // Lévy operates on motor-track only — anim-track runs independently
+  // during the loop. Falls back to `.steps` for ancient library entries
+  // that pre-date the two-track split.
+  const trackOf = seq => Array.isArray(seq?.motor) ? seq.motor
+                       : Array.isArray(seq?.steps) ? seq.steps
+                       : [];
+  const a = trackOf(seqLibrary[LEVY_A_NAME]);
+  const b = trackOf(seqLibrary[LEVY_B_NAME]);
+  if (!a.length) return [];
+  const out = [];
+  const cloneSteps = src => src.map(s => ({ ...s }));
+  out.push(...cloneSteps(a));
+  out.push(...cloneSteps(a));
+  if (b.length && Math.random() * 100 < LEVY_B_PROB) out.push(...cloneSteps(b));
+  return out;
+}
+// Named-library state. `seqLibrary` is {name: {target, steps}} loaded from
+// localStorage['sequenceLibrary']. `seqCurrentName` tracks which entry the
+// working sequence was last loaded-from / saved-as; null means "untitled".
+let seqLibrary     = {};
+let seqCurrentName = null;
+
+// ── Built-in library entries ────────────────────────────
+// Seeded into seqLibrary on first load (tracked via
+// localStorage['seqLibrarySeededBuiltins'] so deleted builtins stay gone).
+// Transcribed from Sequences.rtfd: "F" = fwd, "R" = rev, "TR" = turn_r,
+// "TL" = turn_l, "STOP" at end maps to natural end-of-sequence motors-off.
+// Durations are in seconds, speeds in percent. The PAUSE after each motor
+// step in the RTF becomes an explicit pause step.
+//
+// Target is 0xFF ("Both") by default — the sequences aren't about which
+// robot runs what; the user picks target per play via the card's target
+// selector.
+const _F  = (speed, dur) => ({ type: 'fwd',    speed, dur });
+const _R  = (speed, dur) => ({ type: 'rev',    speed, dur });
+const _TR = (speed, dur) => ({ type: 'turn_r', speed, dur });
+const _TL = (speed, dur) => ({ type: 'turn_l', speed, dur });
+const _P  = (dur)        => ({ type: 'pause', dur });
+
+const BUILTIN_SEQUENCES = {
+  'Finding': { target: 0xFF, steps: [
+    _F(60, 4),   _P(2),
+    _TR(60, 4),  _P(4),
+    _TL(60, 4),  _P(4),
+    _F(60, 4),   _P(10),
+    _R(100, 2.5),
+  ]},
+  'Missed Connections': { target: 0xFF, steps: [
+    _TL(60, 1),  _P(1),
+    _TL(60, 1),  _P(2),
+    _TL(60, 1),  _P(1),
+    _TL(60, 3),  _P(2),
+    _TR(30, 4),  _P(2),
+    _F(50, 5),   _P(2),
+    _R(50, 8),   _P(4),
+    _F(100, 8),
+  ]},
+  [LEVY_A_NAME]: { target: 0xFF, steps: [
+    _F(60, 2),    _P(1),
+    _TR(60, 1.5), _P(1),
+    _F(60, 2),    _P(1),
+    _TL(60, 1),   _P(1),
+    _F(60, 3),    _P(2),
+  ]},
+  [LEVY_B_NAME]: { target: 0xFF, steps: [
+    _TR(60, 2),   _P(1),
+    _F(80, 6),    _P(2),
+    _TL(60, 1.5), _P(1),
+    _F(80, 5),    _P(1),
+  ]},
+  'Lévy Loop': { target: 0xFF, steps: [
+    { type: 'levy_loop', dur: 0.1 },
+  ]},
+  'I See You': { target: 0xFF, steps: [
+    _F(30, 1),    _P(3),
+    _P(4),
+    _TR(20, 1),   _P(1),
+    _TL(20, 2),   _P(2),
+    _F(20, 2),    _P(3),
+  ]},
+  'Circling': { target: 0xFF, steps: [
+    _TR(40, 3),   _P(1),
+    _TR(40, 3),   _P(1),
+    _F(30, 2),    _P(2),
+    _TR(40, 3),   _P(1),
+    _P(5),
+  ]},
+  'Chemotaxis': { target: 0xFF, steps: [
+    _F(80, 5),    _P(0.5),
+    _TR(100, 1.5),
+    _F(80, 5),    _P(0.5),
+    _TL(100, 2),
+  ]},
+};
+
+// Seed built-in entries into seqLibrary on first load. We track which
+// builtins have been seeded (by name) in localStorage so a user who
+// deletes one doesn't have it reappear on the next reload.
+// Returns true if any new entries were added.
+function seedBuiltins() {
+  let seeded;
+  try {
+    const raw = localStorage.getItem('seqLibrarySeededBuiltins');
+    seeded = raw ? JSON.parse(raw) : {};
+    if (!seeded || typeof seeded !== 'object') seeded = {};
+  } catch (_) { seeded = {}; }
+  let added = 0;
+  for (const [name, src] of Object.entries(BUILTIN_SEQUENCES)) {
+    if (seeded[name]) continue;                 // already seeded once
+    if (seqLibrary[name]) { seeded[name] = true; continue; }  // user has their own
+    // Built-ins are written in the legacy { target, steps: [...] } form;
+    // toTwoTrack splits into motor+anim. Anim column starts empty —
+    // users can add anim steps per sequence as desired.
+    seqLibrary[name] = toTwoTrack(src);
+    seeded[name] = true;
+    added++;
+  }
+  try { localStorage.setItem('seqLibrarySeededBuiltins', JSON.stringify(seeded)); } catch (_) {}
+  return added;
+}
+
+// Migrate legacy step shapes to current STEP_TYPES before normalisation.
+// The matrix animation overhaul replaced the single `matrix_anim` step
+// (which armed a fixed 3-minute arc) with three specific anim types —
+// Bouncers, Game of Life, and Ovoid. We auto-translate old matrix_anim
+// steps by complexity band so users don't lose saved sequences.
+function migrateStep(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (s.type === 'matrix_anim') {
+    const c = Number(s.cmplx) | 0;
+    if (c <= 0)      return { type: 'anim_off',    dur: s.dur || 1 };
+    if (c <= 5)      return { type: 'anim_bounce', cmplx: Math.max(1, c),
+                              anim: s.anim || 20,  dur: s.dur || 1, tgt: s.tgt };
+    /* c 6..10 */    return { type: 'anim_gol',    cmplx: Math.min(10, c),
+                              anim: s.anim || 20,  dur: s.dur || 1, tgt: s.tgt };
+  }
+  return s;
+}
+
+// Fill in any missing params with their defaults. Drops obsolete fields
+// (`pattern` from the Brian's-Brain era). Preserves unknown fields so
+// captured raw steps keep their `_cap_target` annotation.
+function normalizeStep(s) {
+  const def = STEP_TYPES[s.type];
+  if (!def) return s;
+  const out = { type: s.type };
+  for (const p of def.params) {
+    out[p] = s[p] !== undefined ? s[p] : STEP_DEFAULTS[p];
+  }
+  for (const k of Object.keys(s)) if (!(k in out)) out[k] = s[k];
+  return out;
+}
+
+// Partition a flat step array into { motor, anim } by looking up each
+// step's `track` in STEP_TYPES. Legacy saved sequences (stored as
+// { target, steps: [...] }) use this to split into the new two-track
+// shape on load.
+function splitStepsByTrack(steps) {
+  const motor = [], anim = [];
+  for (const raw of steps) {
+    const st = normalizeStep(migrateStep(raw));
+    const def = STEP_TYPES[st.type];
+    if (!def) continue;
+    (def.track === 'anim' ? anim : motor).push(st);
+  }
+  return { motor, anim };
+}
+
+// Accept either the new { target, motor, anim } shape OR the legacy
+// { target, steps } shape; always return the new shape. Used by load,
+// saveNamed, library seeding, and the exporter — anything that eats a
+// "sequence object". The target field is validated separately.
+function toTwoTrack(seq) {
+  if (!seq || typeof seq !== 'object') return { target: 0xFF, motor: [], anim: [] };
+  const target = [0, 1, 255].includes(seq.target) ? seq.target : 0xFF;
+  if (Array.isArray(seq.motor) || Array.isArray(seq.anim)) {
+    const m = (seq.motor || []).map(s => normalizeStep(migrateStep(s))).filter(s => STEP_TYPES[s.type]);
+    const a = (seq.anim  || []).map(s => normalizeStep(migrateStep(s))).filter(s => STEP_TYPES[s.type]);
+    return { target, motor: m, anim: a };
+  }
+  if (Array.isArray(seq.steps)) {
+    const { motor, anim } = splitStepsByTrack(seq.steps);
+    return { target, motor, anim };
+  }
+  return { target, motor: [], anim: [] };
+}
+
+function loadSequence() {
+  try {
+    const raw = localStorage.getItem('sequence');
+    if (raw) {
+      const loaded = toTwoTrack(JSON.parse(raw));
+      sequence.target = loaded.target;
+      sequence.motor  = loaded.motor;
+      sequence.anim   = loaded.anim;
+    }
+  } catch (_) {}
+  try {
+    const rawLib = localStorage.getItem('sequenceLibrary');
+    if (rawLib) {
+      const lib = JSON.parse(rawLib);
+      if (lib && typeof lib === 'object') {
+        seqLibrary = {};
+        for (const [k, v] of Object.entries(lib)) {
+          if (v && (Array.isArray(v.steps) || Array.isArray(v.motor) || Array.isArray(v.anim))) {
+            seqLibrary[k] = toTwoTrack(v);
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  try {
+    const cur = localStorage.getItem('sequenceCurrentName');
+    if (cur && seqLibrary[cur]) seqCurrentName = cur;
+  } catch (_) {}
+  try {
+    const n  = parseInt(localStorage.getItem('seqRepeatN'), 10);
+    const el = $('seqRepeatN');
+    if (el && Number.isFinite(n) && n >= 1 && n <= 999) el.value = String(n);
+  } catch (_) {}
+}
+function saveRepeatN() {
+  const el = $('seqRepeatN');
+  if (!el) return;
+  let n = parseInt(el.value, 10);
+  if (!Number.isFinite(n) || n < 1) n = 1;
+  if (n > 999) n = 999;
+  try { localStorage.setItem('seqRepeatN', String(n)); } catch (_) {}
+}
+function saveSequence() {
+  try { localStorage.setItem('sequence', JSON.stringify(sequence)); } catch (_) {}
+}
+function saveLibrary() {
+  try { localStorage.setItem('sequenceLibrary', JSON.stringify(seqLibrary)); } catch (_) {}
+  try {
+    if (seqCurrentName) localStorage.setItem('sequenceCurrentName', seqCurrentName);
+    else                localStorage.removeItem('sequenceCurrentName');
+  } catch (_) {}
+}
+
+// Deep-equality on two sequences' motor + anim track contents. Used to
+// decide whether the working sequence is "dirty" vs. its library source.
+// Compares only the fields that matter for playback (type + numerics);
+// ignores drag-only state.
+function _trackEqual(ta, tb) {
+  if (!Array.isArray(ta) || !Array.isArray(tb)) return false;
+  if (ta.length !== tb.length) return false;
+  for (let i = 0; i < ta.length; i++) {
+    const sa = ta[i], sb = tb[i];
+    if (sa.type !== sb.type) return false;
+    if (Number(sa.speed || 0) !== Number(sb.speed || 0)) return false;
+    if (Number(sa.dur   || 0) !== Number(sb.dur   || 0)) return false;
+    if (Number(sa.cmplx || 0) !== Number(sb.cmplx || 0)) return false;
+    if (Number(sa.anim  || 0) !== Number(sb.anim  || 0)) return false;
+    if (Number(sa.mode  || 0) !== Number(sb.mode  || 0)) return false;
+  }
+  return true;
+}
+function sequencesEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.target !== b.target) return false;
+  return _trackEqual(a.motor || [], b.motor || []) &&
+         _trackEqual(a.anim  || [], b.anim  || []);
+}
+
+// Recompute the current-name badge (title suffix) based on whether we have
+// a named sequence loaded and whether it's been edited since load.
+function renderSeqCurrent() {
+  const el = $('seqCurName'); if (!el) return;
+  if (!seqCurrentName) {
+    el.textContent = '(untitled)';
+    el.className = 'seq-cur';
+    return;
+  }
+  const src = seqLibrary[seqCurrentName];
+  const dirty = !sequencesEqual(sequence, src);
+  el.textContent = (dirty ? '• ' : '') + seqCurrentName;
+  el.className = 'seq-cur ' + (dirty ? 'dirty' : 'named');
+}
+
+// Rebuild the <select> of saved-sequence names. Sorted A–Z; the current
+// entry is kept selected so saving-over it doesn't rearrange focus.
+function renderSeqLibrary() {
+  const sel = $('seqLibSel'); if (!sel) return;
+  const names = Object.keys(seqLibrary).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const opts = ['<option value="">(select saved…)</option>']
+    .concat(names.map(n => {
+      const sel = n === seqCurrentName ? ' selected' : '';
+      const esc = n.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<option value="${esc}"${sel}>${esc}</option>`;
+    }));
+  sel.innerHTML = opts.join('');
+  renderSeqCurrent();
+}
+
+// Copy the working sequence into the library under the name typed in the
+// text field. If the name exists, confirm overwrite. Persists immediately.
+function saveNamed() {
+  const inp = $('seqLibName');
+  const name = (inp.value || '').trim();
+  if (!name) { alert('Enter a name first.'); inp.focus(); return; }
+  const totalSteps = sequence.motor.length + sequence.anim.length;
+  if (!totalSteps) {
+    if (!confirm('The working sequence has no steps. Save it anyway?')) return;
+  }
+  if (seqLibrary[name] && name !== seqCurrentName) {
+    if (!confirm(`Overwrite saved sequence "${name}"?`)) return;
+  }
+  // Deep copy both tracks so subsequent edits don't mutate the library entry.
+  seqLibrary[name] = {
+    target: sequence.target,
+    motor:  sequence.motor.map(s => ({ ...s })),
+    anim:   sequence.anim.map(s => ({ ...s })),
+  };
+  seqCurrentName = name;
+  saveLibrary();
+  diagPush(`SEQ  saved "${name}" (${sequence.motor.length} motor + ${sequence.anim.length} anim step${totalSteps === 1 ? '' : 's'})`);
+  inp.value = '';
+  renderSeqLibrary();
+}
+
+// Load the selected library entry into the working sequence. If the working
+// sequence is dirty, confirm first so user doesn't lose unsaved edits.
+function loadNamed(name) {
+  if (!name) { renderSeqCurrent(); return; }
+  const src = seqLibrary[name];
+  if (!src) return;
+  // Guard against clobbering unsaved work. Skip if working seq is empty or
+  // already equal to what we're loading.
+  const totalWork = (sequence.motor?.length || 0) + (sequence.anim?.length || 0);
+  if (totalWork &&
+      !sequencesEqual(sequence, seqLibrary[seqCurrentName] || {}) &&
+      !sequencesEqual(sequence, src)) {
+    if (!confirm('Discard unsaved changes to the current sequence?')) {
+      // Revert the <select> to whatever was actually loaded.
+      $('seqLibSel').value = seqCurrentName || '';
+      return;
+    }
+  }
+  sequence.target = src.target;
+  sequence.motor  = (src.motor || []).map(s => ({ ...s }));
+  sequence.anim   = (src.anim  || []).map(s => ({ ...s }));
+  seqCurrentName  = name;
+  saveSequence();
+  saveLibrary();
+  const total = sequence.motor.length + sequence.anim.length;
+  diagPush(`SEQ  loaded "${name}" (${sequence.motor.length} motor + ${sequence.anim.length} anim step${total === 1 ? '' : 's'})`);
+  renderSteps();
+  renderSeqTargetButtons();
+  renderSeqLibrary();
+}
+
+// Delete the currently selected saved sequence (or, if none selected, the
+// one named in the text field). Does NOT touch the working sequence — you
+// can save it back under a new name if you deleted by mistake.
+function deleteNamed() {
+  const sel  = $('seqLibSel');
+  const inp  = $('seqLibName');
+  const name = sel.value || (inp.value || '').trim();
+  if (!name) { alert('Select a saved sequence to delete.'); return; }
+  if (!seqLibrary[name]) { alert(`"${name}" is not in the library.`); return; }
+  if (!confirm(`Delete saved sequence "${name}"?`)) return;
+  delete seqLibrary[name];
+  if (seqCurrentName === name) seqCurrentName = null;
+  saveLibrary();
+  diagPush(`SEQ  deleted "${name}"`);
+  renderSeqLibrary();
+}
+
+// ── Firmware export ────────────────────────────────────
+// Turn every sequence in seqLibrary into the complete contents of
+// autoplay_sequences.h, which lives in each sketch folder
+// (mauwb_emitter/ and mauwb_receiver/) alongside the .ino. The user
+// downloads the file, drops it into both folders (overwriting the
+// previous copy), sets AUTOPLAY_SEQUENCE at the top of each .ino, and
+// reflashes. Motor bias is a global per-robot setting (Manual Drive
+// slider → 0x11) — deliberately NOT exported as a step.
+//
+// Each sequence emits TWO arrays — SEQ_<name>_MOTOR[] and SEQ_<name>_ANIM[]
+// — and AUTOPLAY_TABLE pairs them via an AutoSeq struct. Both tracks run
+// in parallel on firmware; when the motor track reaches SOP_END the whole
+// sequence finishes and the anim track aborts.
+//
+// Mapping (keep in sync with AutoOp in the .ino files):
+//   motor track:
+//     fwd / rev / turn_l / turn_r / walk → SOP_FWD/REV/TL/TR/WALK, p1=speed
+//     pause              → SOP_PAUSE
+//     raw / levy_loop    → skipped with an inline // comment
+//   anim track:
+//     anim_bounce        → SOP_ANIM_BOUNCE, p1=cmplx(1-5), p2=anim ms/frame
+//     anim_gol           → SOP_ANIM_GOL,    p1=cmplx(6-10), p2=anim ms/frame
+//     anim_ovoid         → SOP_ANIM_OVOID,  p2=anim ms/frame
+//     anim_off           → SOP_ANIM_OFF
+//     led_set            → SOP_LED,         p1=mode
+//
+// Sequence name → C identifier: strip diacritics, uppercase, non-alnum → _,
+// collapse runs, strip leading/trailing _. "Lévy A (cluster)" → "LEVY_A_CLUSTER".
+function _cName(name) {
+  let s = String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  s = s.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'UNNAMED';
+  if (/^[0-9]/.test(s)) s = '_' + s;  // C identifiers can't start with a digit
+  return s;
+}
+
+// Convert one step to a "{ SOP_*, p1, p2, dur_ms },\n" string, with a
+// trailing inline comment describing the source. Returns null for steps
+// that can't be serialized; caller emits a placeholder comment.
+function _stepToC(step) {
+  const s  = normalizeStep(step);
+  const ms = Math.max(0, Math.round(Number(s.dur || 0) * 1000));
+  const sp = v => Math.max(0, Math.min(100, Number(v) | 0));
+  switch (s.type) {
+    case 'fwd':    return { op: 'SOP_FWD',          p1: sp(s.speed), p2: 0, ms, note: `fwd ${sp(s.speed)}% ${s.dur}s` };
+    case 'rev':    return { op: 'SOP_REV',          p1: sp(s.speed), p2: 0, ms, note: `rev ${sp(s.speed)}% ${s.dur}s` };
+    case 'turn_l': return { op: 'SOP_TL',           p1: sp(s.speed), p2: 0, ms, note: `turn L ${sp(s.speed)}% ${s.dur}s` };
+    case 'turn_r': return { op: 'SOP_TR',           p1: sp(s.speed), p2: 0, ms, note: `turn R ${sp(s.speed)}% ${s.dur}s` };
+    case 'pause':  return { op: 'SOP_PAUSE',        p1: 0,           p2: 0, ms, note: `pause ${s.dur}s` };
+    case 'walk':   return { op: 'SOP_WALK',         p1: sp(s.speed), p2: 0, ms, note: `walk ${sp(s.speed)}% ${s.dur}s` };
+    case 'anim_bounce': {
+      const cmp  = Math.max(1, Math.min(5,  Number(s.cmplx) | 0));
+      const anim = Math.max(5, Math.min(50, Number(s.anim)  | 0));
+      return { op: 'SOP_ANIM_BOUNCE', p1: cmp, p2: anim, ms,
+               note: `bouncers cmplx=${cmp} anim=${anim*10}ms` };
+    }
+    case 'anim_gol': {
+      const cmp  = Math.max(6, Math.min(10, Number(s.cmplx) | 0));
+      const anim = Math.max(5, Math.min(50, Number(s.anim)  | 0));
+      return { op: 'SOP_ANIM_GOL', p1: cmp, p2: anim, ms,
+               note: `gol cmplx=${cmp} anim=${anim*10}ms` };
+    }
+    case 'anim_ovoid': {
+      const anim = Math.max(5, Math.min(50, Number(s.anim) | 0));
+      return { op: 'SOP_ANIM_OVOID', p1: 0, p2: anim, ms,
+               note: `ovoid merge anim=${anim*10}ms` };
+    }
+    case 'anim_off': {
+      return { op: 'SOP_ANIM_OFF', p1: 0, p2: 0, ms, note: `matrix off` };
+    }
+    case 'led_set': {
+      const mode = Math.max(0, Math.min(5, Number(s.mode) | 0));
+      const modeName = ['off','solid','slow','fast','gol-pixel','random'][mode] || String(mode);
+      return { op: 'SOP_LED', p1: mode, p2: 0, ms, note: `led ${modeName}` };
+    }
+    default:
+      return null;
+  }
+}
+
+// Emit one { SOP_*, p1, p2, target, ms } row for a named array. Returns
+// the number of rows actually committed (skipped rows don't count). The
+// SOP_END terminator is appended by the caller and uses target=0xFF so
+// it always applies to both robots regardless of seq.target.
+//
+// Per-step target encoding: 0=T0 only, 1=T1 only, 0xFF=Both. Effective
+// target for a step is step.tgt if set, otherwise the sequence's
+// card-level target (defaultTgt). Both robots execute the same .h file;
+// each one skips steps whose target byte doesn't match its MY_ROBOT_ID
+// (and isn't 0xFF). See the AutoStep struct in mauwb_*.ino.
+function _emitTrackArray(lines, arrName, steps, seqName, skipped, defaultTgt) {
+  lines.push(`static const AutoStep ${arrName}[] = {`);
+  let emitted = 0;
+  for (const st of steps) {
+    const c = _stepToC(st);
+    if (!c) {
+      lines.push(`  // skipped: ${st && st.type} step (not expressible as AutoStep)`);
+      skipped.push(`${seqName}: ${st && st.type}`);
+      continue;
+    }
+    const tgtNum = (st && st.tgt !== undefined && st.tgt !== null)
+      ? Number(st.tgt)
+      : Number(defaultTgt);
+    const tgtByte = ([0, 1, 255].includes(tgtNum)) ? tgtNum : 255;
+    const tgtStr  = tgtByte === 255 ? '0xFF' : String(tgtByte);
+    const tgtTag  = tgtByte === 255 ? 'B' : `T${tgtByte}`;
+    const op = c.op.padEnd(16);
+    const p1 = String(c.p1).padStart(4);
+    const p2 = String(c.p2).padStart(3);
+    const tg = tgtStr.padStart(4);
+    const ms = String(c.ms).padStart(6);
+    lines.push(`  { ${op},${p1}, ${p2}, ${tg}, ${ms} },  // [${tgtTag}] ${c.note}`);
+    emitted++;
+  }
+  lines.push(`  { SOP_END           ,   0,   0, 0xFF,      0 },`);
+  lines.push(`};`);
+  return emitted;
+}
+
+// Search the export string for the snapshotted sequence's anim block
+// and report how many of its first six rows ended up with which target
+// byte. Tells us, post-emit, exactly what landed in the .h text — useful
+// for confirming the .h on disk matches what the exporter produced.
+function _diagSampleExportedAnim(text, ident) {
+  const re = new RegExp(`SEQ_${ident}_ANIM\\s*\\[\\s*\\]\\s*=\\s*\\{([\\s\\S]*?)\\}\\s*;`);
+  const m = re.exec(text);
+  if (!m) return 'block not found';
+  const body = m[1];
+  const rows = body.split('\n').filter(l => /\{\s*SOP_/.test(l)).slice(0, 6);
+  return rows.map((r, i) => {
+    const f = /,\s*([0-9xA-Fa-f]+)\s*,\s*[0-9]+\s*\}/.exec(r);  // 4th-from-last is target
+    return `${i}:${f ? f[1] : '?'}`;
+  }).join(' ');
+}
+
+function buildFirmwareExport() {
+  // Snapshot the working sequence into its library slot before export.
+  // Per-step target / param edits hit `sequence` (the working copy) but
+  // the export reads `seqLibrary[name]`. Without this auto-save, an edit
+  // followed by Export-without-Save silently drops the edit. We only
+  // touch the slot the user was editing — other library entries are
+  // untouched. Saved to localStorage too so a refresh keeps the change.
+  if (seqCurrentName && (sequence.motor.length || sequence.anim.length)) {
+    seqLibrary[seqCurrentName] = {
+      target: sequence.target,
+      motor:  sequence.motor.map(s => ({ ...s })),
+      anim:   sequence.anim.map(s => ({ ...s })),
+    };
+    saveLibrary();
+    // Diagnostic: count distinct tgt values across the working sequence
+    // and dump them so we can see if the per-step dropdown actually
+    // persisted the value (e.g. T1 = 1) or if everything is still 255.
+    const tally = (arr) => {
+      const c = { und: 0, t0: 0, t1: 0, both: 0, other: 0 };
+      for (const s of arr) {
+        if (s.tgt === undefined || s.tgt === null) c.und++;
+        else if (s.tgt === 0)   c.t0++;
+        else if (s.tgt === 1)   c.t1++;
+        else if (s.tgt === 255) c.both++;
+        else c.other++;
+      }
+      return c;
+    };
+    const mT = tally(sequence.motor);
+    const aT = tally(sequence.anim);
+    const fmt = (c) => `und=${c.und} T0=${c.t0} T1=${c.t1} Both=${c.both}` + (c.other ? ` other=${c.other}` : '');
+    diagPush(`SEQ  export: "${seqCurrentName}" motor[${fmt(mT)}] anim[${fmt(aT)}]`);
+    // Also dump the raw tgt of the first 6 anim steps so we can see what
+    // the dropdown actually wrote.
+    const sample = sequence.anim.slice(0, 6).map((s, i) => `${i}:${s.tgt === undefined ? 'und' : s.tgt}`).join(' ');
+    if (sample) diagPush(`SEQ  export: anim[0..5] tgt = ${sample}`);
+  } else if (!seqCurrentName) {
+    diagPush(`SEQ  export: working sequence has no name (load a saved one or click Save first)`);
+  }
+
+  // Stable order: alphabetized, same as the library selector. Index 1 in
+  // AUTOPLAY_TABLE is the first name here; the user sets AUTOPLAY_SEQUENCE
+  // to the number shown in the `AUTOPLAY_SEQUENCE = N` legend.
+  const names = Object.keys(seqLibrary).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  if (!names.length) return '// (library is empty — save at least one sequence first)\n';
+
+  // Uniquify C identifiers in case two names collapse to the same slug.
+  const idents = {};
+  const seen   = {};
+  for (const n of names) {
+    let id = _cName(n);
+    let k = 2;
+    while (seen[id]) { id = _cName(n) + '_' + (k++); }
+    seen[id] = true;
+    idents[n] = id;
+  }
+
+  const lines = [];
+  const skipped = [];
+  lines.push('// Generated by position_map/index.html — "Export fw" button.');
+  lines.push('// Drop this file into BOTH mauwb_emitter/ and mauwb_receiver/');
+  lines.push('// (alongside each .ino), set AUTOPLAY_SEQUENCE at the top of');
+  lines.push('// each .ino to the number you want, and reflash both robots.');
+  lines.push('//');
+  lines.push('// Each sequence has TWO tracks: MOTOR (fwd/rev/turn/pause/walk)');
+  lines.push('// and ANIM (matrix on T0, OLED + LED on T1). Both play in parallel;');
+  lines.push('// motor is primary — when motor hits SOP_END the whole sequence finishes.');
+  lines.push('//');
+  lines.push('// Each AutoStep row is { op, p1, p2, target, dur_ms } where target is');
+  lines.push('// 0=T0 only, 1=T1 only, 0xFF=Both. The shared .h compiles on both robots;');
+  lines.push('// each one skips rows whose target byte does not match its MY_ROBOT_ID');
+  lines.push('// (with no wait — skipped step durations do NOT bleed onto its timeline).');
+  lines.push('//');
+  lines.push('// AUTOPLAY_SEQUENCE numbering (0 disables autoplay):');
+  names.forEach((n, i) => lines.push(`//   ${String(i + 1).padStart(2)} = ${n}`));
+  lines.push('');
+  lines.push('#pragma once');
+  lines.push('');
+
+  for (const name of names) {
+    const seq   = seqLibrary[name] || {};
+    const id    = idents[name];
+    const motor = Array.isArray(seq.motor) ? seq.motor : [];
+    const anim  = Array.isArray(seq.anim)  ? seq.anim  : [];
+    // Sequence-level target is the per-step default. step.tgt overrides.
+    const defT  = ([0, 1, 255].includes(seq.target)) ? seq.target : 255;
+    lines.push(`// ── "${name}" ────`);
+    const nM = _emitTrackArray(lines, `SEQ_${id}_MOTOR`, motor, name, skipped, defT);
+    const nA = _emitTrackArray(lines, `SEQ_${id}_ANIM`,  anim,  name, skipped, defT);
+    if (!nM && !nA) {
+      lines.push(`// NOTE: "${name}" had no supported steps — autoplay will finish immediately.`);
+    }
+  }
+
+  lines.push('');
+  lines.push('// AutoSeq is declared in the .ino alongside AutoStep/AutoOp. Both');
+  lines.push('// pointers are never null — an empty track is still a valid array');
+  lines.push('// containing just SOP_END.');
+  lines.push('static const AutoSeq AUTOPLAY_TABLE[] = {');
+  lines.push('  { nullptr, nullptr },  // index 0 reserved (AUTOPLAY_SEQUENCE=0 disables)');
+  for (const name of names) {
+    const id = idents[name];
+    lines.push(`  { SEQ_${id}_MOTOR, SEQ_${id}_ANIM },`);
+  }
+  lines.push('};');
+  lines.push('static const char* const AUTOPLAY_NAMES[] = {');
+  const cStr = n => '"' + String(n).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  lines.push('  "-",');
+  for (const name of names) lines.push(`  ${cStr(name)},`);
+  lines.push('};');
+  lines.push(`#define AUTOPLAY_COUNT ${names.length}`);
+
+  if (skipped.length) {
+    lines.push('');
+    lines.push('// Skipped steps (not expressible as AutoStep):');
+    skipped.forEach(s => lines.push(`//   - ${s}`));
+  }
+
+  const out = lines.join('\n') + '\n';
+
+  // Post-emit diagnostic: scrape the .h text we just produced and report
+  // the target byte of the first 6 rows of the snapshotted sequence's
+  // anim block. If this disagrees with the pre-emit sample (anim[0..5]
+  // tgt = ...), the exporter has a bug. If they agree but the user's
+  // on-disk file disagrees, the on-disk file is stale (different copy).
+  if (seqCurrentName && idents[seqCurrentName]) {
+    const sample = _diagSampleExportedAnim(out, idents[seqCurrentName]);
+    diagPush(`SEQ  export: emitted anim[0..5] target byte = ${sample}`);
+  }
+
+  return out;
+}
+
+function exportFirmware() {
+  const txt = buildFirmwareExport();
+  $('fwOut').value = txt;
+  $('fwMsg').textContent = '';
+  $('fwOverlay').classList.add('visible');
+}
+
+function closeFwExport() {
+  $('fwOverlay').classList.remove('visible');
+}
+
+function copyFwExport() {
+  const ta = $('fwOut');
+  // Fall back to execCommand for non-HTTPS contexts where Clipboard API is
+  // unavailable (the local python server case).
+  ta.focus();
+  ta.select();
+  let ok = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(
+      () => { $('fwMsg').textContent = 'Copied to clipboard.'; },
+      () => { try { ok = document.execCommand('copy'); } catch (_) {}
+              $('fwMsg').textContent = ok ? 'Copied.' : 'Copy failed — select manually.'; });
+    return;
+  }
+  try { ok = document.execCommand('copy'); } catch (_) {}
+  $('fwMsg').textContent = ok ? 'Copied.' : 'Copy failed — select manually.';
+}
+
+function downloadFwExport() {
+  const blob = new Blob([$('fwOut').value], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'autoplay_sequences.h';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  $('fwMsg').textContent = 'Saved autoplay_sequences.h — place it in both sketch folders.';
+}
+
+// ── Firmware import ─────────────────────────────────────
+// Parse an autoplay_sequences.h file (as generated by buildFirmwareExport)
+// and rebuild seqLibrary entries from it. Used for disaster recovery when
+// localStorage is wiped (private window, browser data clear, different
+// browser profile) but a previously-exported .h file is still on disk.
+//
+// The .h file is the authoritative on-disk record of the user's library —
+// localStorage is just the live working copy. Round-trip parity is the
+// design intent: anything _stepToC can emit, _stepFromC can read back.
+const SOP_TO_TYPE = {
+  'SOP_FWD':         (p1, p2, ms) => ({ type: 'fwd',         speed: p1,                dur: ms / 1000 }),
+  'SOP_REV':         (p1, p2, ms) => ({ type: 'rev',         speed: p1,                dur: ms / 1000 }),
+  'SOP_TL':          (p1, p2, ms) => ({ type: 'turn_l',      speed: p1,                dur: ms / 1000 }),
+  'SOP_TR':          (p1, p2, ms) => ({ type: 'turn_r',      speed: p1,                dur: ms / 1000 }),
+  'SOP_PAUSE':       (p1, p2, ms) => ({ type: 'pause',                                 dur: ms / 1000 }),
+  'SOP_WALK':        (p1, p2, ms) => ({ type: 'walk',        speed: p1,                dur: ms / 1000 }),
+  'SOP_LED':         (p1, p2, ms) => ({ type: 'led_set',     mode: p1,                 dur: ms / 1000 }),
+  'SOP_ANIM_BOUNCE': (p1, p2, ms) => ({ type: 'anim_bounce', cmplx: p1, anim: p2,      dur: ms / 1000 }),
+  'SOP_ANIM_GOL':    (p1, p2, ms) => ({ type: 'anim_gol',    cmplx: p1, anim: p2,      dur: ms / 1000 }),
+  'SOP_ANIM_OVOID':  (p1, p2, ms) => ({ type: 'anim_ovoid',              anim: p2,     dur: ms / 1000 }),
+  'SOP_ANIM_OFF':    (p1, p2, ms) => ({ type: 'anim_off',                              dur: ms / 1000 }),
+};
+
+// Parse one AutoStep-array block body (the text between `= {` and `};`)
+// into an array of step objects, dropping the SOP_END terminator.
+//
+// Two row formats are accepted:
+//   New (5-field):  { SOP_OP, p1, p2, target, ms },  // [tag] note
+//   Legacy (4-field): { SOP_OP, p1, p2, ms },        // note
+// In legacy rows there's no per-step target byte, so the imported step
+// gets step.tgt = undefined (which the runner / exporter will fall back
+// to the sequence's card-level target — same as before this change).
+// New rows preserve the target as step.tgt so round-trip works.
+function _parseTrackBody(body) {
+  const steps = [];
+  // Allow 4 OR 5 numeric fields, tolerant of whitespace and 0xNN literals.
+  const numRe = /(?:0x[0-9A-Fa-f]+|-?\d+)/.source;
+  const rowRe = new RegExp(
+    `\\{\\s*([A-Z_][A-Z0-9_]*)\\s*` +
+    `,\\s*(${numRe})\\s*,\\s*(${numRe})\\s*` +
+    `(?:,\\s*(${numRe})\\s*)?` +     // optional 4th numeric (target in new format)
+    `,\\s*(${numRe})\\s*\\}`,        // final field is always dur_ms
+    'g'
+  );
+  const numFromStr = s => /^0x/i.test(s) ? parseInt(s, 16) : parseInt(s, 10);
+  let m;
+  while ((m = rowRe.exec(body)) !== null) {
+    const op = m[1];
+    const p1 = numFromStr(m[2]);
+    const p2 = numFromStr(m[3]);
+    const hasTarget = m[4] !== undefined;
+    const target = hasTarget ? numFromStr(m[4]) : undefined;
+    const ms = numFromStr(m[5]);
+    if (op === 'SOP_END') continue;
+    const fn = SOP_TO_TYPE[op];
+    if (!fn) continue;  // unknown opcode — silently skip
+    const step = fn(p1, p2, ms);
+    if (hasTarget && [0, 1, 255].includes(target)) step.tgt = target;
+    steps.push(step);
+  }
+  return steps;
+}
+
+// Parse the full .h text. Returns { added: [name, ...], errors: [str, ...] }.
+// Each sequence is identified by the human-readable name in its header
+// comment (`// ── "Display Name" ────`); the SEQ_<SLUG>_MOTOR / _ANIM
+// arrays that immediately follow it are paired up by position in the file.
+function parseFirmwareImport(text) {
+  const out = {};   // name -> { motor: [...], anim: [...] }
+  const errors = [];
+  // Split on the per-sequence header. The first chunk before the first
+  // header is preamble (license, AUTOPLAY_SEQUENCE numbering) — ignored.
+  const headerRe = /\/\/\s*─+\s*"([^"]+)"\s*─+/g;
+  const positions = [];
+  let h;
+  while ((h = headerRe.exec(text)) !== null) {
+    positions.push({ name: h[1], start: h.index });
+  }
+  if (positions.length === 0) {
+    errors.push('No sequence headers found. Expected lines like `// ── "Name" ────`. Is this an autoplay_sequences.h file?');
+    return { added: [], errors };
+  }
+  for (let i = 0; i < positions.length; i++) {
+    const name  = positions[i].name;
+    const start = positions[i].start;
+    const end   = i + 1 < positions.length ? positions[i + 1].start : text.length;
+    const block = text.slice(start, end);
+    // Find the MOTOR and ANIM arrays inside this block. Tolerant of order
+    // and of either array being present alone (legacy single-track form).
+    const motorMatch = /static\s+const\s+AutoStep\s+SEQ_[A-Z0-9_]+_MOTOR\s*\[\s*\]\s*=\s*\{([\s\S]*?)\}\s*;/.exec(block);
+    const animMatch  = /static\s+const\s+AutoStep\s+SEQ_[A-Z0-9_]+_ANIM\s*\[\s*\]\s*=\s*\{([\s\S]*?)\}\s*;/.exec(block);
+    // Pre-dual-track exports used SEQ_<SLUG>[] without a track suffix.
+    const legacyMatch = (!motorMatch && !animMatch)
+      ? /static\s+const\s+AutoStep\s+SEQ_[A-Z0-9_]+\s*\[\s*\]\s*=\s*\{([\s\S]*?)\}\s*;/.exec(block)
+      : null;
+    if (!motorMatch && !animMatch && !legacyMatch) {
+      errors.push(`"${name}": no AutoStep array found.`);
+      continue;
+    }
+    const motor = motorMatch ? _parseTrackBody(motorMatch[1])
+                : legacyMatch ? _parseTrackBody(legacyMatch[1])
+                : [];
+    const anim  = animMatch  ? _parseTrackBody(animMatch[1])  : [];
+    out[name] = { target: 0xFF, motor, anim };
+  }
+  return { added: Object.keys(out), errors, library: out };
+}
+
+// Cache for the auto-fetched on-disk autoplay_sequences.h (see
+// preloadFirmwareFile below). Pre-populates the import modal when the
+// user opens it, so a one-click "Import" round-trips the on-disk file
+// into the library without manual paste/file-pick.
+let _fwPreload = null;     // { text, source } or null
+
+function importFirmware() {
+  if (_fwPreload && _fwPreload.text) {
+    $('fwIn').value = _fwPreload.text;
+    $('fwImpMsg').textContent = `Pre-loaded ${_fwPreload.source} (${_fwPreload.text.length} chars). Click Import to apply.`;
+  } else {
+    $('fwIn').value = '';
+    $('fwImpMsg').textContent = '';
+  }
+  $('fwImpReplace').checked = false;
+  $('fwImpOverlay').classList.add('visible');
+}
+
+// Try to fetch autoplay_sequences.h from a few likely locations on the
+// hosting server. On success, *auto-merges* the parsed sequences into
+// seqLibrary (overwriting same-named entries, leaving browser-only
+// entries alone) so reloading the page is enough to pull in changes
+// from the on-disk file. The textarea is also pre-populated as a
+// fallback / for inspection. Silent on fetch failure — the Import fw
+// button still works via paste / file-picker if no fetch succeeds.
+//
+// If you want this to auto-discover your sketch-folder copy, either:
+//   (a) Run the local server one directory up so both position_map/
+//       and mauwb_*/ are reachable:
+//         cd ~/Documents/Arduino && python3 -m http.server 8000
+//         # then visit http://localhost:8000/position_map/
+//   (b) Symlink the file into position_map/:
+//         ln -s ../mauwb_emitter/autoplay_sequences.h \
+//               position_map/autoplay_sequences.h
+//
+// Use a *symlink* rather than moving/copying the file — the .h is the
+// firmware-source-of-truth and needs to live in the sketch folders for
+// the next reflash. A symlink keeps a single file in two places.
+async function preloadFirmwareFile() {
+  // Same-origin HTTP fetches only — file:// will reject all of these.
+  const candidates = [
+    'autoplay_sequences.h',
+    '../mauwb_emitter/autoplay_sequences.h',
+    '../mauwb_receiver/autoplay_sequences.h',
+  ];
+  for (const path of candidates) {
+    try {
+      const r = await fetch(path, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const text = await r.text();
+      if (!text || !/static\s+const\s+AutoStep/.test(text)) continue;
+      _fwPreload = { text, source: path };
+      // Parse + merge into the live library. Doesn't touch entries that
+      // exist only in the browser (those persist); only same-named .h
+      // entries get overwritten with the on-disk version. The exporter
+      // is round-trip-stable so this is a no-op when nothing changed.
+      const { added, errors, library } = parseFirmwareImport(text);
+      if (library && added.length > 0) {
+        let touched = 0, replaced = 0, fresh = 0;
+        for (const [name, entry] of Object.entries(library)) {
+          if (seqLibrary[name]) replaced++; else fresh++;
+          seqLibrary[name] = entry;
+          touched++;
+        }
+        saveLibrary();
+        renderSeqLibrary();
+        diagPush(`SEQ  auto-loaded ${path}: ${touched} sequence${touched===1?'':'s'} merged (${fresh} new, ${replaced} replaced)${errors.length ? ', ' + errors.length + ' warning(s)' : ''}`);
+      } else {
+        diagPush(`SEQ  found ${path} but parsed 0 sequences${errors.length ? ' (' + errors[0] + ')' : ''}`);
+      }
+      return;
+    } catch (_) { /* network/CORS failure → try next path */ }
+  }
+}
+
+function closeFwImport() {
+  $('fwImpOverlay').classList.remove('visible');
+}
+
+function loadFwImportFile(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    $('fwIn').value = e.target.result || '';
+    $('fwImpMsg').textContent = `Loaded ${f.name} (${$('fwIn').value.length} chars).`;
+  };
+  r.onerror = () => { $('fwImpMsg').textContent = 'Read failed.'; };
+  r.readAsText(f);
+  input.value = '';   // allow re-selecting the same file
+}
+
+function doImportFirmware() {
+  const text = $('fwIn').value || '';
+  if (!text.trim()) { $('fwImpMsg').textContent = 'Nothing to parse — paste or load a file first.'; return; }
+  const { added, errors, library } = parseFirmwareImport(text);
+  if (!library || added.length === 0) {
+    $('fwImpMsg').textContent = errors.join(' ') || 'No sequences parsed.';
+    return;
+  }
+  if ($('fwImpReplace').checked) seqLibrary = {};
+  for (const [name, entry] of Object.entries(library)) {
+    seqLibrary[name] = entry;
+  }
+  // Persist + refresh the dropdown so the user sees them immediately.
+  saveLibrary();
+  renderSeqLibrary();
+  const errMsg = errors.length ? ` (${errors.length} warning${errors.length===1?'':'s'}: ${errors[0]})` : '';
+  $('fwImpMsg').textContent = `Imported ${added.length} sequence${added.length===1?'':'s'}: ${added.join(', ')}.${errMsg}`;
+}
+
+function setSeqTarget(t) {
+  sequence.target = t;
+  saveSequence();
+  renderSeqTargetButtons();
+  renderSeqCurrent();
+}
+
+function renderSeqTargetButtons() {
+  const buttons = $('seqTgtBtns').querySelectorAll('.btn');
+  buttons.forEach(b => {
+    const v = parseInt(b.dataset.tgt, 10);
+    b.classList.toggle('active', v === sequence.target);
+  });
+}
+
+// All step mutators accept (track, i) — track is 'motor' or 'anim' and
+// indexes into the matching array. Updating a step fires `renderSeqCurrent`
+// (dirty-badge) but does NOT redraw the whole list on every keystroke
+// (would blur the input mid-edit).
+function _trackArr(track) {
+  return track === 'anim' ? sequence.anim : sequence.motor;
+}
+
+function addStep(type) {
+  const def = STEP_TYPES[type];
+  if (!def) return;
+  // Sensible per-type default overrides: GoL lives on cmplx 6-10, so
+  // adding a GoL step with cmplx=3 would land out of its band.
+  const overrides = {};
+  if (type === 'anim_gol') overrides.cmplx = 7;
+  const step = { type, ...STEP_DEFAULTS, ...overrides };
+  // Only carry params this type actually uses — keeps stored objects tidy.
+  const tidy = { type };
+  for (const p of def.params) tidy[p] = step[p];
+  _trackArr(def.track).push(tidy);
+  saveSequence();
+  renderSteps();
+}
+
+function removeStep(track, i) {
+  const arr = _trackArr(track);
+  if (!arr[i]) return;
+  arr.splice(i, 1);
+  saveSequence();
+  renderSteps();
+}
+
+function clearSeq() {
+  if (seqRun.active) stopSeq();
+  const n = sequence.motor.length + sequence.anim.length;
+  if (!n) return;
+  if (!confirm('Clear all ' + n + ' step(s)?')) return;
+  sequence.motor = [];
+  sequence.anim  = [];
+  saveSequence();
+  renderSteps();
+}
+
+function updateStep(track, i, key, val) {
+  const arr = _trackArr(track);
+  if (!arr[i]) return;
+  const n = parseFloat(val);
+  if (!Number.isFinite(n)) return;
+  arr[i][key] = n;
+  saveSequence();
+  renderSeqCurrent();
+}
+
+// Changing a step's type may cross tracks (e.g. LED → Pause). The row
+// gets moved to the target track at the same visual position if possible,
+// otherwise appended. Callers pass the current (track, i) of the row.
+function updateStepType(track, i, newType) {
+  const def = STEP_TYPES[newType];
+  const arr = _trackArr(track);
+  if (!def || !arr[i]) return;
+  const old = arr[i];
+  const next = { type: newType };
+  for (const p of def.params) {
+    next[p] = old[p] !== undefined ? old[p] : STEP_DEFAULTS[p];
+  }
+  if (old.tgt         !== undefined) next.tgt         = old.tgt;
+  if (old._cap_target !== undefined) next._cap_target = old._cap_target;
+  if (def.track === track) {
+    arr[i] = next;
+  } else {
+    // Cross-track move: remove from source, append to destination.
+    arr.splice(i, 1);
+    _trackArr(def.track).push(next);
+  }
+  saveSequence();
+  renderSteps();
+}
+
+function updateStepTarget(track, i, val) {
+  const arr = _trackArr(track);
+  if (!arr[i]) return;
+  if (val === '' || val === null || val === undefined) {
+    delete arr[i].tgt;
+  } else {
+    const n = Number(val);
+    if (![0, 1, 255].includes(n)) return;
+    arr[i].tgt = n;
+  }
+  saveSequence();
+  renderSteps();
+}
+
+// Per-param renderer. Dispatches on STEP_PARAM_META[p].kind so adding a
+// new param shape (e.g. a color picker) is a single-place change.
+// Uses BOTH oninput (fires per keystroke) and onchange (fires on blur /
+// Enter) so edits are committed immediately — Run no longer uses the
+// pre-edit value if the user forgot to click away from the input.
+function renderStepParam(track, i, s, p) {
+  const m = STEP_PARAM_META[p];
+  if (!m) return '';
+  const v = s[p];
+  const h = `updateStep('${track}',${i},'${p}',this.value)`;
+  if (m.kind === 'num') {
+    return `<label class="seq-param">${m.label}
+      <input type="number" min="${m.min}" max="${m.max}" step="${m.step}" value="${v}"
+        oninput="${h}" onchange="${h}">${m.suffix}</label>`;
+  }
+  if (m.kind === 'choice') {
+    const opts = m.options.map(o =>
+      `<option value="${o.v}"${Number(v) === o.v ? ' selected' : ''}>${o.t}</option>`
+    ).join('');
+    return `<label class="seq-param">${m.label}
+      <select onchange="${h}">${opts}</select></label>`;
+  }
+  if (m.kind === 'bytes') {
+    const preview = Array.isArray(v) && v.length
+      ? v.map(b => (b & 0xFF).toString(16).padStart(2, '0')).join(' ')
+      : '(empty)';
+    return `<label class="seq-param seq-param-bytes" title="Raw command bytes (read-only, from live capture)">
+      ${m.label} <span class="seq-bytes">${preview}</span></label>`;
+  }
+  return '';
+}
+
+// Render one track's column. The type-dropdown lists only step types
+// whose `.track` matches this column, so swapping e.g. Bouncers↔GoL is a
+// simple dropdown change. Cross-track changes go through the motor/anim
+// "Add step" buttons instead.
+function _renderTrack(track) {
+  const elId = track === 'anim' ? 'seqStepsAnim' : 'seqStepsMotor';
+  const el = $(elId); if (!el) return;
+  const arr = _trackArr(track);
+  if (!arr.length) {
+    const hint = track === 'anim'
+      ? 'No animation steps. The matrix stays off until you add one.'
+      : 'No motor steps. Add an action below.';
+    el.innerHTML = `<div class="seq-empty">${hint}</div>`;
+    return;
+  }
+  // lastFiredIdx tracks the most-recently-fired step (the new scheduler
+  // queues all steps upfront, so cur.idx jumps to arr.length immediately
+  // and isn't useful for "currently active" highlighting).
+  const runCur  = seqRun.active ? seqRun[track].lastFiredIdx : -1;
+  const optsForTrack = Object.entries(STEP_TYPES).filter(([, v]) => v.track === track);
+  const html = arr.map((s, i) => {
+    const def = STEP_TYPES[s.type];
+    if (!def) return '';
+    const runClass =
+      !seqRun.active   ? '' :
+      i === runCur     ? ' active' :
+      i <  runCur      ? ' done'   : '';
+    const optsHtml = optsForTrack
+      .map(([k, v]) => `<option value="${k}"${k === s.type ? ' selected' : ''}>${v.label}</option>`)
+      .join('');
+    const paramsHtml = def.params.map(p => renderStepParam(track, i, s, p)).join('');
+    const lockedCls = seqRun.active ? ' locked' : '';
+    const tgtVal  = (s.tgt === undefined || s.tgt === null) ? '' : String(s.tgt);
+    const tgtSel  = (v) => v === tgtVal ? ' selected' : '';
+    return `
+      <div class="seq-row${runClass}${lockedCls}" data-track="${track}" data-idx="${i}">
+        <span class="seq-drag" title="Drag to reorder">&#x283F;</span>
+        <span class="seq-idx">${i + 1}</span>
+        <select class="seq-tgt-sel" data-t="${tgtVal}"
+          title="Target robot for this step (Inherit = use card's Target)"
+          onchange="updateStepTarget('${track}', ${i}, this.value)">
+          <option value=""${tgtSel('')}>Inherit</option>
+          <option value="0"${tgtSel('0')}>T0</option>
+          <option value="1"${tgtSel('1')}>T1</option>
+          <option value="255"${tgtSel('255')}>Both</option>
+        </select>
+        <select onchange="updateStepType('${track}', ${i}, this.value)">${optsHtml}</select>
+        ${paramsHtml}
+        <button class="seq-del" onclick="removeStep('${track}', ${i})" title="Remove step">&times;</button>
+      </div>`;
+  }).join('');
+  el.innerHTML = html;
+}
+
+function renderSteps() {
+  _renderTrack('motor');
+  _renderTrack('anim');
+  wireSeqDnD();
+  renderSeqProgress();
+  renderSeqCurrent();
+}
+
+// Drag-and-drop reordering for sequence steps. The row itself is the drag
+// target (so drops land on a full row, not just the handle), but drag is
+// only *enabled* when the user grabs the handle — otherwise editing inputs
+// would keep triggering phantom drags. The handle flips `row.draggable` on
+// mousedown and dragend flips it back off. Disabled entirely while a
+// sequence is running (would desync the track cursors).
+// Drag-reorder is scoped per-track: a dragged row can only drop on rows in
+// its own column (motor stays motor, anim stays anim). Cross-track moves
+// are instead done by deleting and re-adding on the other column.
+function wireSeqDnD() {
+  const motorRows = document.querySelectorAll('#seqStepsMotor .seq-row');
+  const animRows  = document.querySelectorAll('#seqStepsAnim  .seq-row');
+  _wireDnDForRows('motor', motorRows);
+  _wireDnDForRows('anim',  animRows);
+}
+
+function _wireDnDForRows(track, rows) {
+  let srcIdx = -1;
+  rows.forEach(row => {
+    const handle = row.querySelector('.seq-drag');
+    if (!handle) return;
+    handle.addEventListener('mousedown', () => {
+      if (seqRun.active) return;
+      row.draggable = true;
+    });
+    handle.addEventListener('mouseup', () => { row.draggable = false; });
+    row.addEventListener('dragstart', (e) => {
+      if (seqRun.active) { e.preventDefault(); return; }
+      srcIdx = +row.dataset.idx;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', String(srcIdx)); } catch (_) {}
+    });
+    row.addEventListener('dragend', () => {
+      row.draggable = false;
+      rows.forEach(r => r.classList.remove('dragging', 'drop-before', 'drop-after'));
+      srcIdx = -1;
+    });
+    row.addEventListener('dragover', (e) => {
+      if (srcIdx < 0) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = row.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      rows.forEach(r => r.classList.remove('drop-before', 'drop-after'));
+      row.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    row.addEventListener('dragleave', (e) => {
+      if (!row.contains(e.relatedTarget)) {
+        row.classList.remove('drop-before', 'drop-after');
+      }
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (srcIdx < 0) return;
+      const rect = row.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      let dst = +row.dataset.idx + (after ? 1 : 0);
+      if (srcIdx < dst) dst -= 1;
+      if (dst !== srcIdx) moveStep(track, srcIdx, dst);
+    });
+  });
+}
+
+function moveStep(track, from, to) {
+  if (seqRun.active) return;
+  const arr = _trackArr(track);
+  const n = arr.length;
+  if (from < 0 || from >= n) return;
+  if (to   < 0 || to   >= n) return;
+  if (from === to) return;
+  const [item] = arr.splice(from, 1);
+  arr.splice(to, 0, item);
+  saveSequence();
+  renderSteps();
+}
+
+function renderSeqProgress() {
+  const el = $('seqProg'); if (!el) return;
+  const nM = sequence.motor.length;
+  const nA = sequence.anim.length;
+  const n  = nM + nA;
+  if (seqRun.active) {
+    // Use lastFiredIdx — the new scheduler queues all setTimeouts up
+    // front, so cur.idx jumps to arr.length immediately and would always
+    // show the last step. -1 (nothing fired yet) clamps to step 0 / 1-of-N.
+    const mShown = Math.max(0, seqRun.motor.lastFiredIdx);
+    const aShown = Math.max(0, seqRun.anim .lastFiredIdx);
+    const mStep = sequence.motor[mShown];
+    const aStep = sequence.anim [aShown];
+    const mLabel = mStep ? STEP_TYPES[mStep.type]?.label : '–';
+    const aLabel = aStep ? STEP_TYPES[aStep.type]?.label : '–';
+    const rep = seqRun.repeatTotal > 1
+      ? ` · rep ${seqRun.repeatDone + 1}/${seqRun.repeatTotal}`
+      : '';
+    el.className = 'seq-prog running';
+    const mPart = nM ? `M ${mShown + 1}/${nM}: ${mLabel || '?'}` : 'M –';
+    const aPart = nA ? `A ${aShown + 1}/${nA}: ${aLabel || '?'}` : 'A –';
+    el.textContent = `Running · ${mPart} · ${aPart}${rep}`;
+  } else if ((seqRun.motor.lastFiredIdx >= 0 || seqRun.anim.lastFiredIdx >= 0) && !seqRun.active) {
+    el.className = 'seq-prog done';
+    el.textContent = `Done · ${nM}+${nA} step(s)`;
+  } else {
+    el.className = 'seq-prog';
+    el.textContent = n ? `${nM} motor + ${nA} anim step(s) ready` : 'no steps';
+  }
+}
+
+// Low-level: send one command to a given target with the record-passthrough
+// guard, so runner-issued commands don't get re-captured by active recording.
+function _sendToTarget(target, bytes) {
+  recording.passthrough = true;
+  try {
+    if (target === 255) cmdBoth(...bytes);
+    else                cmdTo(target, ...bytes);
+  } finally {
+    recording.passthrough = false;
+  }
+}
+
+// Legacy runner helper: always uses the card-level target. Kept for any
+// callers that don't need per-step routing (e.g. the final all-stop).
+function sendSeqCmd(...bytes) {
+  _sendToTarget(sequence.target, bytes);
+}
+
+// Per-step sender used by def.exec(). Honours step.tgt when set so that
+// a single sequence can interleave T0-only, T1-only, and Both commands;
+// unset / null falls back to the card-level target, preserving classic
+// behaviour for hand-built sequences that don't override.
+function sendForStep(step) {
+  const raw = step ? step.tgt : undefined;
+  const target = (raw === undefined || raw === null) ? sequence.target : Number(raw);
+  return (...bytes) => _sendToTarget(target, bytes);
+}
+
+function toggleRec() {
+  if (recording.active) { stopRec(); }
+  else                  { startRec(); }
+}
+
+function startRec() {
+  if (seqRun.active) { alert('Stop the running sequence before recording.'); return; }
+  const existing = sequence.motor.length + sequence.anim.length;
+  if (existing) {
+    if (!confirm(`Recording will replace the current sequence (${existing} step(s)). Continue?`)) return;
+    sequence.motor = [];
+    sequence.anim  = [];
+    saveSequence();
+    renderSteps();
+  }
+  recording = { active: true, startedAt: performance.now(), events: [], passthrough: false };
+  updateRecUI();
+  diagPush('CMD  Recording started — every command issued becomes a step');
+}
+
+function stopRec() {
+  if (!recording.active) return;
+  recording.active = false;
+  const events = recording.events;
+  const elapsed = (performance.now() - recording.startedAt) / 1000;
+  diagPush(`CMD  Recording stopped: ${events.length} event(s) over ${elapsed.toFixed(1)}s`);
+  // Convert events to steps. Each event's duration is the gap to the next
+  // event; the last event gets a small trailing hold so it visibly runs
+  // instead of being clobbered by the sequence-complete motors-off.
+  const TAIL_MS = 500;
+  const steps = events.map((ev, i) => {
+    const nextTs = i + 1 < events.length ? events[i + 1].ts : (ev.ts + TAIL_MS);
+    const durS = Math.max(0.1, (nextTs - ev.ts) / 1000);
+    // Retarget: Record honours whoever cmdTo was called with. If the
+    // card's Target doesn't match, captured steps will still play back to
+    // the originally-targeted robot via the `raw` step's bytes; but the
+    // sequence target selector drives which TID the bytes are sent to at
+    // playback. To keep playback faithful to what was recorded, we pin
+    // sequence.target to the most-frequently-seen target below.
+    return {
+      type:   'raw',
+      bytes:  ev.bytes.slice(),
+      dur:    Math.round(durS * 10) / 10,
+      // Pin this step to the target it was actually captured against, so
+      // a replay of a mixed T0/T1 session routes each step correctly no
+      // matter what the card-level Target is set to. The user can switch
+      // any row back to "Inherit" from the per-step dropdown if desired.
+      tgt:         [0, 1, 255].includes(ev.target) ? ev.target : undefined,
+      _cap_target: ev.target,
+    };
+  });
+  // Pick the dominant target from the recorded events so playback matches
+  // what the user actually pressed. Falls back to the current selector if
+  // events are empty or evenly split.
+  if (events.length) {
+    const tally = {};
+    for (const ev of events) tally[ev.target] = (tally[ev.target] || 0) + 1;
+    const winner = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+    const w = Number(winner[0]);
+    if ([0, 1, 255].includes(w)) sequence.target = w;
+  }
+  // Captured bytes land in the motor track (the common case for live
+  // motor capture). If an LED/matrix command was mixed in, the raw bytes
+  // still replay faithfully — they're just sequenced alongside motor steps.
+  sequence.motor = steps;
+  sequence.anim  = [];
+  saveSequence();
+  renderSeqTargetButtons();
+  renderSteps();
+  updateRecUI();
+}
+
+function updateRecUI() {
+  const recBtn = $('seqRecBtn');
+  const runBtn = $('seqRunBtn');
+  if (recBtn) {
+    recBtn.classList.toggle('active', recording.active);
+    recBtn.textContent = recording.active ? '\u25A0 Stop Rec' : '\u25CF Record';
+  }
+  // Run and Record are mutually exclusive.
+  if (runBtn) runBtn.disabled = recording.active;
+}
+
+// Two-track runner. The motor and animation tracks each have their own
+// cursor and timer. They start simultaneously when Run is pressed and
+// advance independently by each step's own duration. Motor is the
+// "primary" track: when it finishes all repeats the sequence is done
+// and the anim track is aborted. Anim-only sequences are also allowed —
+// the runner recognises an empty motor track and lets the anim track
+// be primary.
+function runSeq() {
+  if (seqRun.active) return;
+  if (recording.active) { alert('Stop recording before running.'); return; }
+  const nM = sequence.motor.length;
+  const nA = sequence.anim.length;
+  if (!nM && !nA) { alert('No steps to run.'); return; }
+  if (!port) { alert('Connect the serial port first.'); return; }
+  // Pre-flight grace before the first step fires: the runner's busy
+  // timeline is seeded ~250 ms in the future so step 0's fireAt naturally
+  // ends up at now0+250. This gives the BLE adv pipeline (anchor relay
+  // at 20 ms intervals, robots scanning at 10 ms / 100 ms = 10% duty)
+  // time to settle out of whatever state it was in — typically a fresh
+  // 0x0C from the Stop button — before the first sequence cmd starts
+  // overwriting the manuf-data slot. Without this, the first 1-2 cmds
+  // after a Stop+Run cycle can land during the anchor's adv transition
+  // and miss every scan window the robots open. The cost is one barely
+  // perceptible 250 ms hesitation before each sequence starts.
+  const PRE_FLIGHT_MS = 250;
+  const now0 = performance.now() + PRE_FLIGHT_MS;
+  seqRun.active      = true;
+  seqRun.motor       = { idx: 0, lastFiredIdx: -1, timers: [], busy: { 0: now0, 1: now0 }, done: !nM };
+  seqRun.anim        = { idx: 0, lastFiredIdx: -1, timers: [], busy: { 0: now0, 1: now0 }, done: !nA };
+  seqRun.repeatTotal = Math.max(1, Math.min(999, parseInt($('seqRepeatN')?.value, 10) || 1));
+  seqRun.repeatDone  = 0;
+  const reps = seqRun.repeatTotal > 1 ? ` x${seqRun.repeatTotal}` : '';
+  diagPush(`CMD  Sequence run: ${nM} motor + ${nA} anim step(s)${reps}, target=${sequence.target === 255 ? 'Both' : 'T' + sequence.target}`);
+  // Kick off each track that has any steps.
+  if (nM) runNextTrackStep('motor');
+  if (nA) runNextTrackStep('anim');
+}
+
+// Per-track scheduler. Walks all remaining steps in one synchronous pass
+// and queues a setTimeout per step. Each step's fireAt is computed from
+// its target's per-track busy timeline (cur.busy[tgt]) — so steps for
+// different robots overlap automatically, while same-robot steps still
+// serialize. After all steps are queued we add a final timer that fires
+// _onTrackEnded once the latest busy time has elapsed. Lévy-loop expands
+// inline (motor-only): the marker step swaps cycleSteps and recurses;
+// _onTrackEnded then generates the next cycle if we're still in a Lévy
+// loop, preserving busy timeline continuity across cycles.
+function runNextTrackStep(track) {
+  if (!seqRun.active) return;
+  const cur = seqRun[track];
+
+  while (true) {
+    const arr = (track === 'motor' && seqRun.levy) ? seqRun.levy.cycleSteps
+              : _trackArr(track);
+    if (cur.idx >= arr.length) {
+      // End-of-array sentinel: schedule _onTrackEnded after the latest
+      // queued step finishes. Done in a setTimeout (not inline) so any
+      // already-queued step fires first.
+      const wait = Math.max(0, Math.max(cur.busy[0], cur.busy[1]) - performance.now());
+      cur.timers.push(setTimeout(() => _onTrackEnded(track), wait));
+      return;
+    }
+
+    const step = arr[cur.idx];
+    const def  = STEP_TYPES[step.type];
+    if (!def) { cur.idx++; continue; }
+
+    // Lévy-loop marker (motor track only): swap in a fresh cycle, reset
+    // idx, and re-loop. cur.busy is intentionally preserved so the new
+    // cycle slots in immediately after the previous one's last step.
+    if (step.type === 'levy_loop') {
+      const first = generateLevyCycle();
+      if (!first.length) {
+        diagPush(`WARN Lévy loop: "${LEVY_A_NAME}" missing or empty — skipping`);
+        cur.idx++;
+        continue;
+      }
+      seqRun.levy = { cycleSteps: first, cycleCount: 1 };
+      cur.idx = 0;
+      diagPush(`CMD  Lévy loop: cycle 1 (${first.length} step${first.length === 1 ? '' : 's'})`);
+      continue;
+    }
+
+    // Sanitize numeric params in place so the runner doesn't silently fire at
+    // 50 ms when the user cleared an input and forgot to blur before Run.
+    for (const p of def.params) {
+      const meta = STEP_PARAM_META[p];
+      if (!meta || meta.kind !== 'num') continue;
+      const n = Number(step[p]);
+      if (!Number.isFinite(n) || (p === 'dur' && n <= 0)) {
+        step[p] = STEP_DEFAULTS[p];
+      }
+    }
+
+    const ms      = Math.max(50, step.dur * 1000);
+    const tgtRaw  = (step.tgt === undefined || step.tgt === null) ? sequence.target : Number(step.tgt);
+    const tgt     = tgtRaw;
+    const stepIdx = cur.idx;
+    const arrLen  = arr.length;
+    const now     = performance.now();
+
+    let fireAt;
+    if (tgt === 255) {
+      // Both: barrier-fires when both robots are free; marks both busy.
+      fireAt = Math.max(cur.busy[0], cur.busy[1], now);
+      cur.busy[0] = cur.busy[1] = fireAt + ms;
+    } else {
+      // Single robot: fires when that robot is free. Other robot unaffected.
+      fireAt = Math.max(cur.busy[tgt] || 0, now);
+      cur.busy[tgt] = fireAt + ms;
+    }
+
+    const wait = Math.max(0, fireAt - now);
+    const t = setTimeout(() => {
+      if (!seqRun.active) return;
+      try { def.exec(sendForStep(step), step); } catch (e) { console.error('[seq exec]', e); }
+
+      const paramStr = def.params.map(p => {
+        const meta = STEP_PARAM_META[p];
+        if (!meta)                   return null;
+        if (meta.kind === 'bytes')   return `bytes=[${(step[p] || []).map(b => (b & 0xFF).toString(16).padStart(2, '0')).join(' ')}]`;
+        if (meta.kind === 'choice') {
+          const o = meta.options.find(o => o.v === Number(step[p]));
+          return `${p}=${o ? o.t : step[p]}`;
+        }
+        if (p === 'dur')             return `dur=${step.dur}s`;
+        return `${p}=${step[p]}`;
+      }).filter(Boolean).join(' ');
+      const effTgtStr = tgt === 255 ? 'Both' : `T${tgt}`;
+      const tag = track === 'anim' ? 'A' : 'M';
+      diagPush(`CMD  ${tag} ${stepIdx + 1}/${arrLen} [${effTgtStr}]: ${def.label} ${paramStr}`);
+      if (step.dur < 0.3) {
+        diagPush(`WARN step dur ${step.dur}s is very short — the robot may miss it`);
+      }
+      cur.lastFiredIdx = stepIdx;
+      renderSteps();
+    }, wait);
+    cur.timers.push(t);
+    cur.idx++;
+  }
+}
+
+// Called when a track's step cursor walks off the end. Motor is primary:
+// its end triggers repeat logic and (after the last repeat) the whole
+// sequence complete. Anim end simply marks that track done; it waits
+// silently until motor finishes too. Sequences with no motor steps let
+// the anim track act as primary.
+function _onTrackEnded(track) {
+  const cur = seqRun[track];
+  cur.done = true;
+  const nM = sequence.motor.length;
+  const nA = sequence.anim.length;
+  const primary = nM ? 'motor' : 'anim';
+
+  if (track !== primary) {
+    // Secondary track just waits for the primary to finish.
+    return;
+  }
+
+  // Primary track reached end-of-list. Lévy loop keeps recycling forever.
+  if (seqRun.levy) {
+    const next = generateLevyCycle();
+    if (!next.length) {
+      diagPush(`WARN Lévy loop: "${LEVY_A_NAME}" missing or empty — stopping`);
+      _finishSeq();
+      return;
+    }
+    seqRun.levy.cycleCount++;
+    seqRun.levy.cycleSteps = next;
+    seqRun[primary].idx = 0;
+    diagPush(`CMD  Lévy loop: cycle ${seqRun.levy.cycleCount} (${next.length} step${next.length === 1 ? '' : 's'})`);
+    renderSteps();
+    runNextTrackStep(primary);
+    return;
+  }
+
+  seqRun.repeatDone++;
+  if (seqRun.repeatDone < seqRun.repeatTotal) {
+    sendSeqCmd(0x01, 0, 0);
+    diagPush(`CMD  Sequence repeat ${seqRun.repeatDone + 1}/${seqRun.repeatTotal}`);
+    // Rewind BOTH tracks for the next repeat — anim restarts in lockstep
+    // with motor so paired timing lines up every iteration. Per-target
+    // busy timelines reset to (now + 120ms gap) so the new repeat starts
+    // cleanly instead of stacking onto the previous repeat's timeline.
+    _clearTrackTimer('motor');
+    _clearTrackTimer('anim');
+    // 120ms gap before the new repeat fires its first step. Encoded by
+    // pre-loading busy = now + 120 — runNextTrackStep computes fireAt as
+    // max(busy[tgt], now), so the first step naturally waits 120ms.
+    const t0 = performance.now() + 120;
+    seqRun.motor = { idx: 0, lastFiredIdx: -1, timers: [], busy: { 0: t0, 1: t0 }, done: !nM };
+    seqRun.anim  = { idx: 0, lastFiredIdx: -1, timers: [], busy: { 0: t0, 1: t0 }, done: !nA };
+    renderSteps();
+    if (nM) runNextTrackStep('motor');
+    if (nA) runNextTrackStep('anim');
+    return;
+  }
+
+  _finishSeq();
+}
+
+// Cancel every pending setTimeout for this track and reset the array.
+// Used by Stop, repeat reset, and Lévy regen — anywhere we need to flush
+// the per-target schedule we just queued.
+function _clearTrackTimer(track) {
+  const cur = seqRun[track];
+  if (!cur || !cur.timers) return;
+  for (const t of cur.timers) clearTimeout(t);
+  cur.timers = [];
+}
+
+function _finishSeq() {
+  sendSeqCmd(0x01, 0, 0);
+  _clearTrackTimer('motor');
+  _clearTrackTimer('anim');
+  seqRun.active = false;
+  seqRun.levy   = null;
+  diagPush('CMD  Sequence complete');
+  renderSteps();
+}
+
+function stopSeq() {
+  if (!seqRun.active) return;
+  _clearTrackTimer('motor');
+  _clearTrackTimer('anim');
+  seqRun.active = false;
+  // Safety: unconditionally zero motors on stop.
+  sendSeqCmd(0x01, 0, 0);
+  const mShown = Math.max(0, seqRun.motor.lastFiredIdx) + 1;
+  const aShown = Math.max(0, seqRun.anim .lastFiredIdx) + 1;
+  const where = seqRun.levy
+    ? `Lévy cycle ${seqRun.levy.cycleCount}, motor ${mShown}`
+    : `motor ${mShown}/${sequence.motor.length}, anim ${aShown}/${sequence.anim.length}`;
+  diagPush(`CMD  Sequence stopped at ${where}`);
+  seqRun.levy = null;
+  renderSteps();
+}
+
+loadSequence();
+const _addedBuiltins = seedBuiltins();
+if (_addedBuiltins > 0) {
+  saveLibrary();
+  diagPush(`SEQ  seeded ${_addedBuiltins} built-in sequence${_addedBuiltins === 1 ? '' : 's'}`);
+}
+renderSeqTargetButtons();
+renderSteps();
+renderSeqLibrary();
+updateRecUI();
+// Populate the bias sliders from localStorage on first paint. No cmdTo
+// fires here because `port` is null pre-connect; loadBias() is called
+// again by the connect handler to actually push values to the robots.
+loadBias();
+
+// Background-fetch autoplay_sequences.h from the sketch folder if it's
+// reachable from the hosting server. Pre-populates the Import fw modal
+// so the on-disk authoritative file is one click away from the library.
+preloadFirmwareFile();
+</script>
+</body>
+</html>
