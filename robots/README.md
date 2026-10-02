@@ -8,15 +8,15 @@ The robots are not identical:
 
 | | Robot A: **Emitter** (UWB tag T0) | Robot B: **Receiver** (UWB tag T1) |
 |---|---|---|
-| Body | 8x8 LED grid topped with a crystal cube, giving a diffused, organic light | Black quartz on the front, mirror shard on the back, one green LED (Moi by Despina Papadopoulos) |
+| Body | 8x8 LED grid topped with a crystal cube | Black quartz on the front, mirror shard on the back, one green LED (Moi by Despina Papadopoulos) |
 | Character | Expressive, searching, reactive | Still, watchful, minimal |
 | Sketch | `mauwb_emitter` | `mauwb_receiver` |
 
 A third device, the **Anchor**, connects the laptop to the robots. The laptop talks to it over USB serial, and it talks to the robots over Bluetooth LE.
 
-## Emergent behavior: this applied only to the **affection** sketches.
+## Emergent behavior
 
-Each robot moves through three emotional states on a timer. This is not because it senses the other robot. It is because that is its nature.
+This applied only to the **affection** sketches. Each robot moves through three emotional states on a timer. This is not because it senses the other robot. It is because that is its nature.
 
 * **Hesitation** (0 to 30 s): sparse, uncertain, things start and stop.
 * **Ambivalence** (30 to 90 s): oscillating, neither committing nor withdrawing.
