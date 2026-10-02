@@ -2,29 +2,19 @@
 
 > They are fragile. Their paths are unpredictable. They seek each other, sometimes they succeed, often they fail.
 
-Two small autonomous robots that seek and find each other on stage. Made by Philosophy Machines.
+Two small autonomous robots try to seek and find each other. Made by <a href="https://philosophymachines.com/loverobots/">Philosophy Machines</a>.
 
-*Love Robots* is deliberately unstable. It is not robots in love, and not loving robots. Whether they feel anything is unanswerable and possibly meaningless. The behavior is real, and so is the relationship.
-
-The robots are not identical. They are two different beings:
+The robots are not identical:
 
 | | Robot A: **Emitter** (UWB tag T0) | Robot B: **Receiver** (UWB tag T1) |
 |---|---|---|
-| Body | 8x8 LED grid topped with a crystal cube, giving a diffused, organic light | Black quartz on the front, mirror shard on the back, one wide-angle green LED |
+| Body | 8x8 LED grid topped with a crystal cube, giving a diffused, organic light | Black quartz on the front, mirror shard on the back, one green LED (Moi by Despina Papadopoulos) |
 | Character | Expressive, searching, reactive | Still, watchful, minimal |
 | Sketch | `mauwb_emitter` | `mauwb_receiver` |
 
 A third device, the **Anchor**, connects the laptop to the robots. The laptop talks to it over USB serial, and it talks to the robots over Bluetooth LE.
 
-## Theoretical frame: Braitenberg
-
-The key reference is Valentino Braitenberg, *Vehicles: Experiments in Synthetic Psychology* (MIT Press, 1984). Simple vehicles with sensors wired directly to motors, with no internal representation, produce behavior that observers immediately read as psychological: fear, aggression, curiosity, love. The observer supplies the interiority and the vehicle just has wiring.
-
-These robots are Braitenberg vehicles with better bodies. The crystal-cube robot has inputs connected strongly to outputs. The black-quartz robot has weaker connections and more inhibition. The stage is the same but the wiring differs, so the characters differ.
-
-Braitenberg's law of *uphill analysis and downhill invention*: explaining complex behavior from the outside is hard, but building a simple mechanism that produces it is easy. We systematically overestimate the complexity of minds.
-
-## Behavior: three states
+## Emergent behavior: this applied only to the **affection** sketches.
 
 Each robot moves through three emotional states on a timer. This is not because it senses the other robot. It is because that is its nature.
 
@@ -32,7 +22,7 @@ Each robot moves through three emotional states on a timer. This is not because 
 * **Ambivalence** (30 to 90 s): oscillating, neither committing nor withdrawing.
 * **Excitement** (90 s onward): energetic, spreading, committed.
 
-The robots start at slightly different times, so they are in different phases at different moments. That asynchrony is not a bug. It is the relationship.
+The robots start at slightly different times, so they are in different phases at different moments. That asynchrony is not a bug, it is the relationship.
 
 Each state has its own movement palette per robot, so the two feel like different beings. In this code the timed sequence is composed by the **Performance** runner in the browser interface. It is stored as ordinary motion and animation sequences, which can be exported to the robots' firmware as autoplay sequences (see below), so the robots can run it without a laptop.
 
