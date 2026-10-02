@@ -1,106 +1,77 @@
 /*
- * IR Emitter — Proximity Test for Arduino Uno
+ * Uno IR Emitter — 38 kHz burst beacon for TSOP38238 / TSOP4838 receivers
+ * Arduino Uno (USB power)
  *
- * Drives a 940nm IR LED in configurable modes for distance testing.
- * Works standalone on battery (defaults to steady ON).
- * If USB serial is connected, single-key commands switch modes.
+ * Drives a salvaged 940 nm IR LED through a BC547 NPN transistor.
+ * Matches TV-remote style signalling: high peak current in short bursts,
+ * not continuous DC or slow toggle.
  *
- * Serial Monitor: 115200 baud, "No line ending"
+ * Serial Monitor: not required (no serial output).
  *
- * Wiring:
- *   D2 ─── 200 Ω resistor ─── IR LED anode (long leg)
- *                               IR LED cathode (short leg) ─── GND
+ * ── HARDWARE ──────────────────────────────────────────────────────────
+ *
+ * BC547 pinout — flat face toward you, legs pointing down:
+ *
+ *      ┌─────────┐
+ *      │ BC547   │
+ *      └─────────┘
+ *       C   B   E        C = Collector (left)
+ *                          B = Base      (middle)
+ *                          E = Emitter   (right)
+ *
+ * IR LED — clear lens = 940 nm emitter:
+ *   anode  (+) long leg
+ *   cathode (−) short leg
+ *
+ * Connections (4 signal paths):
+ *
+ *   1. Uno D2 ─── 1 kΩ ─── BC547 Base (middle)
+ *
+ *   2. Uno 5V ─── 10 Ω ─── IR LED anode (+)     ← current-limit; see below
+ *   3. IR LED cathode (−) ─── BC547 Collector (left)
+ *   4. BC547 Emitter (right) ─── Uno GND
+ *
+ * ASCII:
+ *
+ *   Uno 5V ─── 10Ω ─── IR LED (+) ─── IR LED (−) ─── BC547 C
+ *                                         BC547 B ←── 1kΩ ←── Uno D2
+ *                                         BC547 E ──────────── Uno GND
+ *
+ * ── RESISTOR NOTES ────────────────────────────────────────────────────
+ *
+ * LED current-limit (5V → anode):
+ *   10 Ω  ≈ 300 mA peak during burst — tested; matches salvaged remote
+ *         (original remote PCB uses 5.6 Ω + pulsed drive, not continuous).
+ *   22 Ω  ≈ 160 mA peak — gentler if 10 Ω feels hot.
+ *   100 Ω ≈  36 mA peak — too dim for room-range TSOP detection.
+ *
+ *   NEVER run 10 Ω with continuous tone() — only with the 9 ms bursts below.
+ *
+ * Base resistor (D2 → Base): 1 kΩ (700 Ω–2 kΩ all OK).
+ *
+ * ── SMOKE TEST (before uploading this sketch) ───────────────────────────
+ *
+ *   void setup() { pinMode(2, OUTPUT); digitalWrite(2, HIGH); }
+ *   void loop() {}
+ *
+ *   Check IR LED with front phone camera — faint purple glow = wiring OK.
+ *   DC HIGH will NOT trigger a TSOP receiver; it needs 38 kHz modulation.
  */
 
 const int IR_PIN = 2;
 
-enum Mode { STEADY_ON, TOGGLE_50HZ, STEADY_OFF };
-Mode mode = STEADY_ON;
+const int CARRIER_HZ = 38000;   // TSOP38xx passband ~36–40 kHz
 
-void applyMode() {
-  switch (mode) {
-    case STEADY_ON:
-      digitalWrite(IR_PIN, HIGH);
-      break;
-    case STEADY_OFF:
-      digitalWrite(IR_PIN, LOW);
-      break;
-    case TOGGLE_50HZ:
-      break;
-  }
-}
+const int BURST_ON_MS  = 9;     // ON window — like a remote packet
+const int BURST_OFF_MS = 91;    // OFF gap — receiver AGC recovery
 
 void setup() {
   pinMode(IR_PIN, OUTPUT);
-  pinMode(LED_BUILTIN, OUTPUT);
-  applyMode();
-
-  Serial.begin(115200);
-  unsigned long t0 = millis();
-  while (!Serial && millis() - t0 < 3000) { delay(10); }
-
-  Serial.println();
-  Serial.println("=========================");
-  Serial.println("  IR Emitter — Test Mode");
-  Serial.println("=========================");
-  printHelp();
-  Serial.println(">> Mode: Steady ON (default)");
-  Serial.println();
-}
-
-void printHelp() {
-  Serial.println("Keys:");
-  Serial.println("  1 = Steady ON");
-  Serial.println("  2 = 50 Hz toggle (for ambient cancellation)");
-  Serial.println("  3 = OFF");
-  Serial.println("  h = Help");
-  Serial.println();
 }
 
 void loop() {
-  if (Serial.available() > 0) {
-    char cmd = Serial.read();
-    switch (cmd) {
-      case '1':
-        mode = STEADY_ON;
-        applyMode();
-        Serial.println(">> Mode: Steady ON");
-        break;
-      case '2':
-        mode = TOGGLE_50HZ;
-        Serial.println(">> Mode: 50 Hz toggle");
-        break;
-      case '3':
-        mode = STEADY_OFF;
-        applyMode();
-        Serial.println(">> Mode: OFF");
-        break;
-      case 'h': case 'H':
-        printHelp();
-        break;
-      case '\n': case '\r': case ' ':
-        break;
-      default:
-        Serial.print(">> Unknown: '");
-        Serial.print(cmd);
-        Serial.println("'");
-        break;
-    }
-  }
-
-  if (mode == TOGGLE_50HZ) {
-    digitalWrite(IR_PIN, HIGH);
-    delayMicroseconds(10000);
-    digitalWrite(IR_PIN, LOW);
-    delayMicroseconds(10000);
-  }
-
-  // Heartbeat blink
-  static unsigned long lastBlink = 0;
-  if (millis() - lastBlink >= 1000) {
-    lastBlink = millis();
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(30);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
+  tone(IR_PIN, CARRIER_HZ);
+  delay(BURST_ON_MS);
+  noTone(IR_PIN);
+  delay(BURST_OFF_MS);
 }
