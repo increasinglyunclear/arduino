@@ -16,7 +16,7 @@ A third device, the **Anchor**, connects the laptop to the robots. The laptop ta
 
 ## Emergent behavior
 
-This applied only to the **affection** sketches. Each robot moves through three emotional states on a timer. This is not because it senses the other robot. It is because that is its nature.
+This applied only to the **affection** sketches. Each robot moves through three emotional states on a timer. 
 
 * **Hesitation** (0 to 30 s): sparse, uncertain, things start and stop.
 * **Ambivalence** (30 to 90 s): oscillating, neither committing nor withdrawing.
