@@ -123,7 +123,3 @@ Tests of 38 kHz infrared signalling, for seeking by line of sight:
 * `Nano_IR_receiver`: an Arduino Nano 33 BLE reads a TSOP38238 or TSOP4838 demodulator and prints detect or idle on Serial (115200 baud). The two boards need no shared ground wire.
 
 The wiring for each is in the header comment of its sketch.
-
-## Credits
-
-Made with love, by Philosophy Machines.
